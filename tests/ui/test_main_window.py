@@ -209,3 +209,16 @@ def test_unreachable_status_points_to_bundled_ai_launcher(qtbot, context, monkey
 def test_bundled_ai_launcher_absent_in_dev_run() -> None:
     from app.ui.main_window import bundled_ai_launcher
     assert bundled_ai_launcher() is None  # 개발 실행(frozen 아님)에서는 없다
+
+
+def test_settings_dialog_lists_bundled_model_even_when_server_down(qtbot, context, monkeypatch) -> None:
+    from PySide6.QtWidgets import QLabel
+
+    """AI 서버가 꺼져 목록이 비어도 동봉 모델은 고를 수 있고, 켜는 방법을 알려 준다(CR-03 실사용 보고)."""
+    monkeypatch.setattr("app.ui.settings_dialog.shipped_default_model", lambda: "test-bundled:4b")
+    dialog = SettingsDialog(context.settings, default_data_root=context.bootstrap_dir)
+    qtbot.addWidget(dialog)
+    items = [dialog.model_combo.itemText(i) for i in range(dialog.model_combo.count())]
+    assert "test-bundled:4b" in items
+    notes = " ".join(label.text() for label in dialog.findChildren(QLabel))
+    assert "AI와 함께 시작" in notes

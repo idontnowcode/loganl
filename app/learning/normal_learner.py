@@ -124,7 +124,8 @@ class NormalLearner:
             if case.case_type != "NORMAL":
                 raise CaseError("정상 사례에서만 패턴 후보를 만듭니다.")
             if case.mode_id is None:
-                raise CaseError("운전 모드를 먼저 정하세요. 정상 패턴은 운전 모드에 종속됩니다.")
+                raise CaseError("운전 모드를 먼저 고르세요. 정상 패턴은 운전 모드마다 따로 만듭니다. "
+                                "목록이 비어 있으면 '관리 → 운전 모드 관리'에서 먼저 등록하세요.")
             if case.status in ("APPROVED", "ARCHIVED"):
                 raise CaseError("승인·보관된 사례는 '수정 시작' 후 다시 만들 수 있습니다.")
             others = [c.id for c in CaseRepository(conn).approved(case_type="NORMAL", mode_id=case.mode_id)

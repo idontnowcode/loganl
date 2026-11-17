@@ -117,3 +117,19 @@ def test_mode_dialog_adds_and_retires(qtbot, ctx) -> None:
     dialog.retire_selected()
     assert dialog.table.item(0, 3).text() == "사용 안 함"
     assert ModeManager(ctx.database).list(active_only=True) == []
+
+
+def test_propose_without_mode_shows_message_at_top(qtbot, ctx, log_ids) -> None:
+    """운전 모드 없이 '패턴 후보 만들기'를 누르면 안내가 화면 위쪽에 보인다(예전에는 오른쪽 맨 아래라 안 보였음)."""
+    page = NormalLearningPage(ctx)
+    qtbot.addWidget(page)
+    page.resize(1366, 700)
+    page.show()
+    page.import_panel.set_log_file_ids(log_ids)
+    page.title_edit.setText("모드 없는 사례")
+    page.propose_patterns()
+    assert "운전 모드 관리" in page.message_label.text()
+    assert page.message_label.isVisible()
+    assert page.layout().indexOf(page.message_label) == 1  # 위쪽 줄 바로 아래(오른쪽 스크롤 밖)
+    page.message_label.clear()
+    assert not page.message_label.isVisible()

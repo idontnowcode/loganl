@@ -129,3 +129,33 @@ def test_newer_settings_version_warns(tmp_path: Path) -> None:
     settings_file.write_text('{"settings_version": 99, "future_key": true}', encoding="utf-8")
     loaded = load_settings(settings_file)
     assert any("새 버전" in w for w in loaded.warnings)
+
+
+def _shipped_with_model(tmp_path: Path, model: str | None) -> Path:
+    data = json.loads(SHIPPED_DEFAULTS_FILE.read_text(encoding="utf-8"))
+    data["ollama"]["model"] = model
+    path = tmp_path / "shipped.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return path
+
+
+def test_old_unset_model_uses_bundled_model(tmp_path: Path) -> None:
+    """다른 PC에 예전 설정(모델 미지정)이 남아 있어도 휴대용 AI 배포본의 동봉 모델을 쓴다(실사용 보고 2026-11-17)."""
+    settings_file = tmp_path / "settings.json"
+    save_settings(AppSettings(), settings_file)  # model = None
+    loaded = load_settings(settings_file, _shipped_with_model(tmp_path, "test-bundled:4b"))
+    assert loaded.settings.ollama.model == "test-bundled:4b"
+    assert json.loads(settings_file.read_text(encoding="utf-8"))["ollama"]["model"] == "test-bundled:4b"
+
+
+def test_user_chosen_model_is_kept_over_bundled(tmp_path: Path) -> None:
+    settings_file = tmp_path / "settings.json"
+    save_settings(AppSettings.model_validate({"ollama": {"model": "user-pick:7b"}}), settings_file)
+    loaded = load_settings(settings_file, _shipped_with_model(tmp_path, "test-bundled:4b"))
+    assert loaded.settings.ollama.model == "user-pick:7b"
+
+
+def test_no_bundled_model_keeps_unset(tmp_path: Path) -> None:
+    settings_file = tmp_path / "settings.json"
+    save_settings(AppSettings(), settings_file)
+    assert load_settings(settings_file, _shipped_with_model(tmp_path, None)).settings.ollama.model is None

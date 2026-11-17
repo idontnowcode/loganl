@@ -158,9 +158,27 @@ def load_settings(settings_file: Path, defaults_file: Path = SHIPPED_DEFAULTS_FI
         save_settings(settings, settings_file)
         return LoadedSettings(settings, warnings, created=False)
 
+    shipped_model = _shipped_model(shipped)
+    if not settings.ollama.model and shipped_model:
+        # 휴대용 AI를 동봉한 배포본(CR-03)인데, 그 PC에 예전 설정 파일(모델 미지정)이 남아 있던 경우.
+        # 미지정은 "아직 고르지 않음"으로 보고 동봉한 모델을 쓴다. 설정 창에서 다른 모델로 바꿀 수 있다.
+        settings = settings.model_copy(update={"ollama": settings.ollama.model_copy(update={"model": shipped_model})})
+        save_settings(settings, settings_file)
+
     if settings.settings_version > SETTINGS_VERSION:
         warnings.append("설정 파일이 이 앱보다 새 버전에서 만들어졌습니다. 이 버전이 모르는 항목은 무시합니다.")
     return LoadedSettings(settings, warnings, created=False)
+
+
+def _shipped_model(shipped: dict[str, Any]) -> str | None:
+    ollama = shipped.get("ollama")
+    model = ollama.get("model") if isinstance(ollama, dict) else None
+    return model.strip() if isinstance(model, str) and model.strip() else None
+
+
+def shipped_default_model(defaults_file: Path = SHIPPED_DEFAULTS_FILE) -> str | None:
+    """배포 기본 설정에 들어 있는 모델(휴대용 AI 동봉 시 그 모델). 없으면 None."""
+    return _shipped_model(_read_shipped_defaults(defaults_file, []))
 
 
 def save_settings(settings: AppSettings, settings_file: Path) -> None:

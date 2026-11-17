@@ -60,6 +60,25 @@ def text_box(height: int = 54, placeholder: str = "") -> QPlainTextEdit:
     return box
 
 
+class StatusLine(QLabel):
+    """동작 결과 안내 줄. 화면 위쪽 고정 위치에 보이고, 비어 있으면 자리를 차지하지 않는다.
+    (예전에는 오른쪽 패널 맨 아래에 있어 '패턴 후보 만들기' 실패 안내가 보이지 않았다.)"""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWordWrap(True)
+        self.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        set_role(self, "hint")
+        self.hide()
+
+    def setText(self, text: str) -> None:  # noqa: N802 (Qt 이름 그대로)
+        super().setText(text)
+        self.setVisible(bool(text))
+
+    def clear(self) -> None:
+        self.setText("")
+
+
 class CaseEditorBase(QWidget):
     case_saved = Signal(int)
 
@@ -163,8 +182,7 @@ class CaseEditorBase(QWidget):
         self.check_label = QLabel()
         self.check_label.setWordWrap(True)
         self.check_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.message_label = QLabel()
-        self.message_label.setWordWrap(True)
+        self.message_label = StatusLine()
         set_role(self.check_label, "muted")
 
         self.question_panel = QuestionPanel(context.database, before_answer=self._save_before_answer)
@@ -182,7 +200,6 @@ class CaseEditorBase(QWidget):
         self.build_specific(self.side)
         self.side.addWidget(QLabel("승인 검사"))
         self.side.addWidget(self.check_label)
-        self.side.addWidget(self.message_label)
         self.side.addStretch(1)
         side_widget = QWidget()
         side_widget.setLayout(self.side)
@@ -201,6 +218,7 @@ class CaseEditorBase(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.addLayout(top)
+        layout.addWidget(self.message_label)
         layout.addWidget(split, 1)
 
         # 자동 저장(§9.1 "학습 데이터 자동 저장"): 입력이 멈추고 잠시 뒤, 탭을 바꿀 때, 앱을 닫을 때

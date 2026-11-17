@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.config import MAX_FILE_MB_LIMIT, AppSettings, describe_validation_error
+from app.config import MAX_FILE_MB_LIMIT, AppSettings, describe_validation_error, shipped_default_model
 from app.ui.theme import set_role
 
 
@@ -48,7 +48,9 @@ class SettingsDialog(QDialog):
         self.model_combo = QComboBox()
         self.model_combo.setEditable(True)
         self.model_combo.addItem("")
-        for name in known_models:
+        bundled = shipped_default_model()
+        # AI 서버가 꺼져 있으면 목록이 비므로, 휴대용 AI 배포본의 동봉 모델은 늘 고를 수 있게 둔다(CR-03)
+        for name in dict.fromkeys([*known_models, *([bundled] if bundled else [])]):
             self.model_combo.addItem(name)
         self.model_combo.setCurrentText(settings.ollama.model or "")
         self.model_combo.lineEdit().setPlaceholderText("미지정 (AI 단계 건너뜀)")
@@ -69,6 +71,9 @@ class SettingsDialog(QDialog):
         ollama_form.addRow("연결 확인 시간", self.connect_timeout_spin)
         ollama_form.addRow("생성 요청 시간", self.request_timeout_spin)
         ollama_form.addRow("", _note("이 PC 안의 주소(127.0.0.1, localhost)만 쓸 수 있습니다."))
+        if not known_models:
+            ollama_form.addRow("", _note("AI 서버에 연결되지 않아 설치된 모델 목록을 못 불러왔습니다. "
+                                         "앱 폴더의 'AI와 함께 시작'으로 켠 뒤 다시 여세요."))
 
         # 가져오기 한도
         self.max_file_spin = QDoubleSpinBox()
