@@ -335,7 +335,8 @@ class MainWindow(QMainWindow):
         AnalysisHistoryDialog(self.context, self).exec()
 
     def busy(self) -> bool:
-        return any(p.runner.busy for p in self.import_panels) or any(p.runner.busy for p in self.case_pages())
+        return (any(p.runner.busy for p in self.import_panels) or any(p.runner.busy for p in self.case_pages())
+                or self.entry_page.ai_runner.busy)
 
     def open_backup(self) -> None:
         dialog = BackupDialog(self.context, can_restore=lambda: not self.busy(), parent=self)
@@ -449,6 +450,7 @@ class MainWindow(QMainWindow):
             panel.runner.wait(10_000)
         for page in self.case_pages():
             page.runner.wait(10_000)
+        self.entry_page.ai_runner.wait(10_000)  # AI 질문 만들기가 끝나기를 잠깐 기다린다(CR-07)
         timeout_ms = int((self.context.settings.ollama.connect_timeout_s + 6) * 1000)
         self._pool.waitForDone(timeout_ms)
 

@@ -99,7 +99,7 @@ def test_approve_locks_and_new_version_archives_old(ctx, library, tmp_path: Path
 def test_cannot_approve_empty_and_delete_draft(ctx, library, tmp_path: Path) -> None:
     doc_id = library.import_file(write_bytes(tmp_path / "prose.txt", "가상 문장만 있음\n".encode("utf-8"))).document_id
     assert library.document(doc_id)["included_count"] == 0
-    with pytest.raises(ReferenceError, match="포함한 항목"):
+    with pytest.raises(ReferenceError, match="읽은 문단도 없습니다"):
         library.approve(doc_id)
     stored = ctx.paths.root / library.document(doc_id)["stored_path"]
     library.delete_draft(doc_id)
@@ -148,3 +148,43 @@ def test_ai_gets_reference_as_knowledge(ctx, library, tmp_path: Path) -> None:  
     prompt = fake.last_prompt()
     assert "REFERENCE" in prompt and "[참고 자료] 코드 TEST-E001" in prompt and "설명 가상 설명 A" in prompt
     assert "REFERENCE" in result.ai.kinds.values()
+
+
+GENERAL_DOC = """# 가상 이슈 설명서 (시험용, 실제 장비 의미 아님)
+
+## 재시도 반복 이슈
+TEST-RETRY가 짧은 간격으로 반복되면 가상 부품 연결이 느슨한 경우가 있었다.
+가상 해결 기록: 가상 커넥터를 다시 끼운 뒤 정상으로 돌아왔다.
+
+## 화면 표시 이슈
+가상 화면 밝기가 낮아지는 현상은 이 로그와 관계없는 가상 설명이다.
+"""
+
+
+def test_general_document_passages_are_used_in_analysis(ctx, library, tmp_path: Path) -> None:  # CR-07 REF-07
+    outcome = library.import_file(write_bytes(tmp_path / "issues.md", GENERAL_DOC.encode("utf-8")), title="가상 이슈 설명서")
+    assert outcome.entries == 0 and outcome.passages >= 2 and "일반 문서" in " ".join(outcome.warnings)
+    passages = library.passages(outcome.document_id)
+    assert any("TEST-RETRY가 짧은 간격으로" in p["body"] for p in passages) and passages[0]["locator"]
+    ids = logs(ctx, [abnormal_log(tmp_path / "a.log")])
+    from app.analysis.reference_matcher import match_passages
+
+    assert match_passages(ctx.database, ids) == []  # 승인 전에는 쓰지 않는다
+    library.approve(outcome.document_id)  # 코드 항목이 없어도 문단이 있으면 승인된다
+    hits = match_passages(ctx.database, ids)
+    assert hits and "TEST-RETRY" in hits[0].body and "TEST-RETRY" in hits[0].matched
+    assert all("화면 밝기" not in h.body for h in hits)  # 겹치는 낱말이 없는 문단은 빼고
+    result = DiagnosticEngine(ctx.database, ctx.paths, ctx.settings).run(AnalysisRequest(ids, use_ai=False))
+    assert result.passages and result.passages[0].document_title == "가상 이슈 설명서"
+    with closing(ctx.database.connect()) as conn:
+        roles = [r["detail_json"] for r in AnalysisRepository(conn).evidence(result.run_id) if r["finding_type"] == "TEXT_MATCH"]
+    assert any('"REFERENCE_PASSAGE"' in d for d in roles)
+    with closing(ctx.database.connect()) as conn, pytest.raises(sqlite3.DatabaseError):  # 승인 뒤 문단 잠금
+        conn.execute("DELETE FROM reference_passages WHERE document_id = ?", (outcome.document_id,))
+
+
+def test_code_lines_are_not_repeated_as_passages(ctx, library, tmp_path: Path) -> None:
+    outcome = library.import_file(write_bytes(tmp_path / "codes.txt", TEXT_DOC.encode("utf-8")))
+    bodies = " ".join(p["body"] for p in library.passages(outcome.document_id))
+    assert "TEST-E001: 가상 설명 A" not in bodies and "가상 설명 C 첫 줄" not in bodies  # 코드 항목으로 쓴 줄은 문단에서 뺀다
+    assert "가상 코드 사전" in bodies  # 코드가 아닌 글은 문단으로 남는다

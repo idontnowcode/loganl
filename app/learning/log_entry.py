@@ -1,8 +1,8 @@
 """로그 입력 (변경 요청 CR-06): 파일 하나 = 사례 하나, 저장 = 승인.
 
-사용자가 하는 일은 세 가지뿐이다: 정상/비정상 고르기, 동작 메모, (비정상이면) 에러로 판단한 근거.
-- 동작 메모 → cases.operating_conditions ("동작 조건 및 상황", 계획서 §3.1)
-- 판단 근거 → cases.abnormal_criteria와 cases.symptom (승인된 비정상은 둘 다 필수인 DB 제약을 지킨다)
+사용자가 하는 일: 정상/비정상 고르기(필수), 메모(선택), (비정상이면) 판단 가이드(선택, CR-07).
+- 메모 → cases.operating_conditions ("동작 조건 및 상황", 계획서 §3.1)
+- 판단 가이드 → cases.abnormal_criteria와 cases.symptom (같은 글. 0006 뒤로는 비워도 승인된다)
 - 저장하면 바로 승인한다(사용자의 판정이 곧 승인, 질문 답 LI-04). 다시 저장하면 수정 시작 → 새 개정본.
 - 정상↔비정상을 바꾸면 사례 종류는 바꿀 수 없으므로 이전 사례를 보관하고 새로 만든다.
 AI는 여기서 아무것도 정하지 않는다.
@@ -111,12 +111,10 @@ class LogEntryService:
         if label not in LABELS:
             raise LogEntryError("정상인지 비정상인지 골라 주세요.")
         memo, criteria = memo.strip(), criteria.strip()
-        if label == "ABNORMAL" and not criteria:
-            raise LogEntryError("비정상 로그는 '에러로 판단한 근거'를 적어 주세요.")
         before = self.entry(log_file_id)
         fields: dict[str, object] = {"operating_conditions": memo or None}
         if label == "ABNORMAL":
-            fields.update(symptom=criteria, abnormal_criteria=criteria)
+            fields.update(symptom=criteria or None, abnormal_criteria=criteria or None)
         title = entry_title(before.file_name, memo)
         try:
             case_id = before.case_id

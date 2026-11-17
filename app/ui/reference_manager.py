@@ -39,7 +39,7 @@ from app.learning.reference_library import STATUS_LABELS, ReferenceError, Refere
 from app.ui.natural_input import StatusLine
 from app.ui.theme import STATUS_TONE, comfortable_table, set_role
 
-DOC_COLUMNS = ("제목", "형식", "상태", "항목")
+DOC_COLUMNS = ("제목", "형식", "상태", "항목·문단")
 ENTRY_COLUMNS = ("포함", "코드", "명칭", "설명", "원인", "조치", "원문 위치")
 ENTRY_FIELDS = (None, "code", "title", "description", "cause", "action", "locator")
 SOURCE_LABELS = {"EXTRACTED": "문서에서", "USER": "직접 입력"}
@@ -56,8 +56,9 @@ class ReferenceManagerDialog(QDialog):
         self._read = None
         self._header_row = 0
 
-        intro = QLabel("에러 코드 목록·코드별 설명 같은 자료(TXT·MD·엑셀·PDF·워드)를 올리세요. 항목을 확인하고 '승인'하면 "
-                       "그때부터 신규 분석에서 로그에 나온 코드의 설명·원인·조치를 따로 보여 주고, AI도 근거로 참고합니다. "
+        intro = QLabel("에러 코드 목록·코드별 설명, 이슈 설명서·해결 기록 같은 자료(TXT·MD·엑셀·PDF·워드)를 올리세요. "
+                       "코드표는 항목으로, 글은 문단으로 읽습니다. 확인하고 '승인'하면 그때부터 신규 분석에서 로그에 나온 코드의 "
+                       "설명·원인·조치와 관련 문단을 따로 보여 주고, AI도 근거로 참고합니다. "
                        "앱은 코드의 뜻을 만들지 않습니다. 승인한 문서는 고칠 수 없고, 고친 파일을 다시 올리면 새 버전이 됩니다.")
         intro.setWordWrap(True)
         set_role(intro, "hint")
@@ -182,7 +183,8 @@ class ReferenceManagerDialog(QDialog):
         self.doc_table.setRowCount(len(docs))
         target_row = None
         for row, doc in enumerate(docs):
-            values = (doc["title"], doc["format"], STATUS_LABELS.get(doc["status"], doc["status"]), str(doc["included_count"]))
+            values = (doc["title"], doc["format"], STATUS_LABELS.get(doc["status"], doc["status"]),
+                      f"{doc['included_count']}·{doc['passage_count']}")
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.ItemDataRole.UserRole, int(doc["id"]))
@@ -227,8 +229,12 @@ class ReferenceManagerDialog(QDialog):
                 self.preview.setPlainText(f"원문을 다시 읽지 못했습니다: {exc}")
         self._fill_tables()
         self.fill_entries()
+        passages = len(self.library.passages(document_id)) if doc is not None else 0
         if doc is None:
             self.entry_hint.setText("'자료 올리기…'로 문서를 올리세요.")
+        elif draft and not self.library.entries(document_id) and passages:
+            self.entry_hint.setText(f"코드 항목이 없는 일반 문서입니다(문단 {passages}개). 원문을 확인하고 '승인'하면 분석할 때 "
+                                    "로그와 관련 있는 문단을 참고합니다. 코드가 있으면 '항목 추가…'로 더할 수도 있습니다.")
         elif draft:
             self.entry_hint.setText("초안입니다. 항목을 확인하고, 빼고 싶은 항목은 '포함' 체크를 풀고, 맞으면 '승인'을 누르세요. "
                                     "승인 전에는 분석·AI에 쓰이지 않습니다.")
@@ -281,7 +287,8 @@ class ReferenceManagerDialog(QDialog):
         if outcome.duplicate:
             text = "이미 올린 파일이라 기존 문서를 열었습니다."
         else:
-            text = f"'{path.name}'에서 코드 항목 {outcome.entries}개를 찾았습니다. 확인하고 승인하세요."
+            text = (f"'{path.name}'에서 코드 항목 {outcome.entries}개, 문단 {outcome.passages}개를 읽었습니다. "
+                    "확인하고 승인하세요.")
         self.message.setText(" ".join([text, *outcome.warnings[:2]]))
         return outcome.document_id
 

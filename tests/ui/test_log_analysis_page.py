@@ -44,7 +44,10 @@ def test_ai_section_shows_hypotheses_and_labels(qtbot, ctx, knowledge, tmp_path:
     ctx.settings = ctx.settings.model_copy(
         update={"ollama": ctx.settings.ollama.model_copy(update={"model": "test-model:7b"})})
     keys = keys_for(ctx, knowledge, tmp_path / "probe")
-    fake = FakeOllama([good_answer(keys)])
+    answer = good_answer(keys)
+    answer["hypotheses"][0]["likelihood"] = 40  # CR-07 AO-01: 가능성(AI 추정치)
+    answer.update(abnormal_likelihood=75, likelihood_reason="가상 이유", likelihood_evidence=[keys["error"]])
+    fake = FakeOllama([answer])
     page = LogAnalysisPage(ctx, fake.factory)
     qtbot.addWidget(page)
     page.import_panel.set_log_file_ids(load(ctx, [abnormal_log(tmp_path / "bad.log", start_second=70)],
@@ -57,7 +60,15 @@ def test_ai_section_shows_hypotheses_and_labels(qtbot, ctx, knowledge, tmp_path:
     assert "■ 원인 가설" in text and "반대 근거" in text
     assert "(AI 제안 확인 절차 — 매뉴얼 근거 없음)" in text  # 근거 없는 확인 절차는 따로 표시
     assert "■ AI가 정리한 대응 순서 (모두 승인된 매뉴얼·가이드 근거)" in text
-    assert "사용자 검토 필요" in page.ai_status.text()
+    assert "사용자 검토 필요" in page.ai_status.text() and "통계 확률이 아닙니다" in page.ai_status.text()
+    assert page.ai_likelihood.text() == "비정상일 가능성 75%" and not page.ai_likelihood.isHidden()
+    assert " 40%  승인 사례와 같은 가상 원인 1일 수 있다" in text and " 60%  판단 불가" in text
+    rel_json, _ = page.save_report()
+    import json
+
+    data = json.loads((ctx.paths.root / rel_json).read_text(encoding="utf-8"))
+    assert data["ai"]["abnormal_likelihood"]["likelihood"] == 75
+    assert data["ai"]["hypotheses"][0]["likelihood"] == 40 and len(data["ai"]["hypotheses"]) == 1
 
 
 def test_empty_request_is_explained(qtbot, ctx) -> None:  # noqa: F811

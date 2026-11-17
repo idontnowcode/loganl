@@ -784,7 +784,8 @@ class ReferenceRepository:
     def document(self, document_id: int) -> sqlite3.Row | None:
         return self.conn.execute(
             "SELECT d.*, (SELECT COUNT(*) FROM reference_entries e WHERE e.document_id = d.id AND e.status = 'INCLUDED')"
-            " AS included_count FROM reference_documents d WHERE d.id = ?", (document_id,)).fetchone()
+            " AS included_count, (SELECT COUNT(*) FROM reference_passages p WHERE p.document_id = d.id) AS passage_count"
+            " FROM reference_documents d WHERE d.id = ?", (document_id,)).fetchone()
 
     def by_sha256(self, sha256: str) -> sqlite3.Row | None:
         return self.conn.execute("SELECT * FROM reference_documents WHERE sha256 = ?", (sha256,)).fetchone()
@@ -793,7 +794,8 @@ class ReferenceRepository:
         where = f" WHERE d.status IN ({placeholders(statuses)})" if statuses else ""
         return self.conn.execute(
             "SELECT d.*, (SELECT COUNT(*) FROM reference_entries e WHERE e.document_id = d.id AND e.status = 'INCLUDED')"
-            f" AS included_count FROM reference_documents d{where} ORDER BY d.id DESC", tuple(statuses or ())).fetchall()
+            f" AS included_count, (SELECT COUNT(*) FROM reference_passages p WHERE p.document_id = d.id) AS passage_count"
+            f" FROM reference_documents d{where} ORDER BY d.id DESC", tuple(statuses or ())).fetchall()
 
     def approved_with_title(self, title: str) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM reference_documents WHERE status = 'APPROVED' AND title = ?",
@@ -855,3 +857,84 @@ class ReferenceRepository:
         return self.conn.execute(
             f"SELECT * FROM approved_reference_entries WHERE code_norm IN ({placeholders(code_norms)})"
             " ORDER BY code_norm, document_id, sort_order, id", tuple(code_norms)).fetchall()
+
+
+class AiQuestionRepository:
+    """LLM 질문(CR-07). 분석·AI가 지식으로 쓰는 답은 confirmed(): confirmed_ai_answers 뷰만 읽는다."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self.conn = conn
+
+    def add(self, case_id: int, *, kind: str, question_text: str, reason: str | None, evidence: Any, model: str | None,
+            dedup_key: str) -> int | None:
+        """같은 사례·같은 질문(dedup_key)이 이미 답했거나 건너뛰었거나 열려 있으면 만들지 않고 None.
+        예전에 OBSOLETE로 내린 같은 질문이면 다시 연다."""
+        evidence_json = json.dumps(evidence or [], ensure_ascii=False)
+        cur = self.conn.execute(
+            "INSERT OR IGNORE INTO ai_questions (case_id, kind, question_text, reason, evidence_json, model, dedup_key,"
+            " created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (case_id, kind, question_text, reason, evidence_json, model, dedup_key, utc_now_iso()))
+        if cur.rowcount:
+            return int(cur.lastrowid)
+        row = self.conn.execute("SELECT id, status FROM ai_questions WHERE case_id = ? AND dedup_key = ?",
+                                (case_id, dedup_key)).fetchone()
+        if row is not None and row["status"] == "OBSOLETE":
+            self.conn.execute("UPDATE ai_questions SET status = 'OPEN', kind = ?, question_text = ?, reason = ?,"
+                              " evidence_json = ?, model = ? WHERE id = ?",
+                              (kind, question_text, reason, evidence_json, model, row["id"]))
+            return int(row["id"])
+        return None
+
+    def get(self, question_id: int) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM ai_questions WHERE id = ?", (question_id,)).fetchone()
+
+    def for_cases(self, case_ids: Sequence[int] | None = None, statuses: Sequence[str] | None = None) -> list[sqlite3.Row]:
+        clauses, params = [], []
+        if case_ids is not None:
+            if not case_ids:
+                return []
+            clauses.append(f"case_id IN ({placeholders(case_ids)})")
+            params.extend(case_ids)
+        if statuses:
+            clauses.append(f"status IN ({placeholders(statuses)})")
+            params.extend(statuses)
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        return self.conn.execute(f"SELECT * FROM ai_questions{where} ORDER BY id DESC", tuple(params)).fetchall()
+
+    def obsolete_open(self, case_id: int) -> None:
+        self.conn.execute("UPDATE ai_questions SET status = 'OBSOLETE' WHERE case_id = ? AND status = 'OPEN'", (case_id,))
+
+    def set_answer(self, question_id: int, *, status: str, answer: str | None, answer_text: str | None) -> None:
+        self.conn.execute("UPDATE ai_questions SET status = ?, answer = ?, answer_text = ?, answered_at = ? WHERE id = ?",
+                          (status, answer, answer_text, utc_now_iso(), question_id))
+
+    def confirmed(self, case_ids: Sequence[int]) -> list[sqlite3.Row]:
+        if not case_ids:
+            return []
+        return self.conn.execute(
+            f"SELECT * FROM confirmed_ai_answers WHERE case_id IN ({placeholders(case_ids)}) ORDER BY case_id, id",
+            tuple(case_ids)).fetchall()
+
+
+class ReferencePassageRepository:
+    """참고 자료 일반 문서 문단(CR-07 REF-07). 분석·AI는 approved()(approved_reference_passages 뷰)만 쓴다."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self.conn = conn
+
+    def add(self, document_id: int, *, body: str, locator: str | None, sort_order: int) -> int:
+        cur = self.conn.execute(
+            "INSERT INTO reference_passages (document_id, sort_order, locator, body, created_at) VALUES (?, ?, ?, ?, ?)",
+            (document_id, sort_order, locator, body, utc_now_iso()))
+        return int(cur.lastrowid)
+
+    def for_document(self, document_id: int) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT * FROM reference_passages WHERE document_id = ? ORDER BY sort_order, id",
+                                 (document_id,)).fetchall()
+
+    def count(self, document_id: int) -> int:
+        return int(self.conn.execute("SELECT COUNT(*) FROM reference_passages WHERE document_id = ?",
+                                     (document_id,)).fetchone()[0])
+
+    def approved(self) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT * FROM approved_reference_passages ORDER BY document_id, sort_order, id").fetchall()

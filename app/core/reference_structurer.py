@@ -157,3 +157,42 @@ def extract_entries(result: ReadResult, column_maps: dict[str, dict] | None = No
             entries.extend(entries_from_table(table, mapping))
     entries.extend(entries_from_lines(result.lines))
     return entries, used
+
+
+PASSAGE_MAX = 600
+PASSAGE_MIN = 10
+
+
+def build_passages(result: ReadResult, entries: list[EntryDraft]) -> list[tuple[str | None, str]]:
+    """일반 문서 문단(CR-07 REF-07): 코드 항목으로 뽑히지 않은 글 줄을 빈 줄·머리글 단위로 묶는다.
+    (원문 위치, 글). 긴 문단은 600자 안쪽으로 나눈다. 표는 넣지 않는다(코드 항목으로 이미 쓰임)."""
+    consumed = {line.strip() for e in entries for line in (e.source_text or "").splitlines() if line.strip()}
+    passages: list[tuple[str | None, str]] = []
+    current: list[str] = []
+    locator: str | None = None
+
+    def flush() -> None:
+        nonlocal current, locator
+        body = " ".join(current).strip()
+        while body:
+            piece, body = body[:PASSAGE_MAX], body[PASSAGE_MAX:]
+            if body:  # 낱말 중간에서 자르지 않게 마지막 공백까지
+                cut = piece.rfind(" ")
+                if cut > PASSAGE_MAX // 2:
+                    piece, body = piece[:cut], piece[cut + 1:] + body
+            if len(piece.strip()) >= PASSAGE_MIN:
+                passages.append((locator, piece.strip()))
+        current, locator = [], None
+
+    for line in result.lines:
+        text = line.text.strip()
+        if not text or text in consumed:
+            flush()
+            continue
+        if text.startswith("#") and current:
+            flush()
+        if not current:
+            locator = line.locator
+        current.append(text.lstrip("#").strip() if text.startswith("#") else text)
+    flush()
+    return passages

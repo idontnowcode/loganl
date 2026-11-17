@@ -18,12 +18,17 @@ from typing import Any
 from app.config import ImportSettings
 from app.core.importer import remove_stored, sha256_bytes, store_original
 from app.core.reference_reader import ReadResult, ReferenceReadError, format_of, read_reference
-from app.core.reference_structurer import ROLES, extract_entries, normalize_code
+from app.core.reference_structurer import ROLES, build_passages, extract_entries, normalize_code
 from app.models import utc_now_iso
 from app.models.enums import AuditAction
 from app.storage.database import Database, transaction
 from app.storage.paths import AppPaths
-from app.storage.repositories import REFERENCE_ENTRY_FIELDS, AuditRepository, ReferenceRepository
+from app.storage.repositories import (
+    REFERENCE_ENTRY_FIELDS,
+    AuditRepository,
+    ReferencePassageRepository,
+    ReferenceRepository,
+)
 
 STATUS_LABELS = {"DRAFT": "초안", "APPROVED": "승인됨", "ARCHIVED": "보관"}
 
@@ -38,6 +43,7 @@ class ImportOutcome:
     duplicate: bool
     entries: int
     warnings: list[str]
+    passages: int = 0  # 일반 문서 문단 수 (CR-07 REF-07)
 
 
 class ReferenceLibrary:
@@ -65,6 +71,7 @@ class ReferenceLibrary:
             return ImportOutcome(int(existing["id"]), True, 0, ["이미 올린 파일입니다. 기존 문서를 엽니다."])
         stored = store_original(data, path.name, self.paths.references, self.paths.root)
         entries, column_maps = extract_entries(result)
+        passages = build_passages(result, entries)
         try:
             with closing(self.database.connect()) as conn, transaction(conn):
                 refs = ReferenceRepository(conn)
@@ -73,16 +80,22 @@ class ReferenceLibrary:
                     stored_path=stored.stored_path, sha256=digest, size_bytes=len(data), fmt=result.format,
                     column_map=column_maps or None)
                 self._add_extracted(refs, document_id, entries)
+                passage_repo = ReferencePassageRepository(conn)
+                for order, (locator, body) in enumerate(passages):
+                    passage_repo.add(document_id, body=body, locator=locator, sort_order=order)
                 AuditRepository(conn).add("reference_document", document_id, AuditAction.IMPORT,
-                                          after={"name": path.name, "format": result.format, "entries": len(entries)})
+                                          after={"name": path.name, "format": result.format, "entries": len(entries),
+                                                 "passages": len(passages)})
         except Exception:
             if stored.created:
                 remove_stored(stored.absolute)
             raise
         warnings = list(result.warnings)
-        if not entries:
+        if not entries and passages:
+            warnings.append("코드 항목은 없고 일반 문서로 읽었습니다. 승인하면 분석할 때 로그와 관련 있는 문단을 참고합니다.")
+        elif not entries:
             warnings.append("코드 항목을 찾지 못했습니다. 표라면 열 역할을 고르고, 아니면 항목을 직접 더하세요.")
-        return ImportOutcome(document_id, False, len(entries), warnings)
+        return ImportOutcome(document_id, False, len(entries), warnings, len(passages))
 
     @staticmethod
     def _add_extracted(refs: ReferenceRepository, document_id: int, entries) -> None:
@@ -113,6 +126,10 @@ class ReferenceLibrary:
         row = self.document(document_id)
         path = self.paths.root / row["stored_path"]
         return read_reference(Path(row["original_name"]), path.read_bytes())
+
+    def passages(self, document_id: int) -> list[sqlite3.Row]:
+        with closing(self.database.connect()) as conn:
+            return ReferencePassageRepository(conn).for_document(document_id)
 
     def column_maps(self, document_id: int) -> dict[str, dict]:
         raw = self.document(document_id)["column_map_json"]
@@ -192,8 +209,8 @@ class ReferenceLibrary:
         """문서를 승인한다. 같은 제목의 이전 승인 버전은 보관하고 그 id 목록을 돌려준다."""
         with closing(self.database.connect()) as conn, transaction(conn):
             row = self._draft(conn, document_id)
-            if not row["included_count"]:
-                raise ReferenceError("포함한 항목이 하나도 없습니다. 항목을 더하거나 '포함'으로 바꾼 뒤 승인하세요.")
+            if not row["included_count"] and not row["passage_count"]:
+                raise ReferenceError("포함한 코드 항목도, 읽은 문단도 없습니다. 항목을 더하거나 '포함'으로 바꾼 뒤 승인하세요.")
             refs = ReferenceRepository(conn)
             older = [int(r["id"]) for r in refs.approved_with_title(row["title"]) if int(r["id"]) != document_id]
             now = utc_now_iso()
@@ -204,7 +221,8 @@ class ReferenceLibrary:
             refs.update_document(document_id, status="APPROVED", approved_at=now,
                                  replaces_id=older[0] if older else None)
             AuditRepository(conn).add("reference_document", document_id, AuditAction.APPROVE,
-                                      after={"entries": row["included_count"], "replaces": older})
+                                      after={"entries": row["included_count"], "passages": row["passage_count"],
+                                             "replaces": older})
             return older
 
     def archive(self, document_id: int) -> None:

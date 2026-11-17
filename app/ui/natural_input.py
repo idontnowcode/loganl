@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPlainTextEdit,
     QPushButton,
+    QSizePolicy,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -52,6 +53,8 @@ class Collapsible(QWidget):
         self.toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.toggle.setCursor(Qt.CursorShape.PointingHandCursor)
         set_role(self.toggle, "disclosure")
+        # 좁은 화면에서 세로로 눌려 글자 아래가 잘리지 않게(1366×768 점검)
+        self.toggle.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.toggle.toggled.connect(self.set_expanded)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -69,6 +72,11 @@ class Collapsible(QWidget):
 
     def is_expanded(self) -> bool:
         return self.toggle.isChecked()
+
+    def showEvent(self, event) -> None:  # noqa: N802 (Qt 이름 그대로)
+        # 스타일이 입혀진 뒤의 크기로 제목 줄 높이를 정한다(스타일시트 여백 때문에 기본 높이가 3px 모자람)
+        self.toggle.setFixedHeight(max(self.toggle.sizeHint().height(), self.toggle.minimumSizeHint().height()))
+        super().showEvent(event)
 
 
 @dataclass

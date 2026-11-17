@@ -65,6 +65,8 @@ def load_report(database: Database, run_id: int) -> dict[str, Any]:
     checks = [{"key": r["evidence_key"], "text": r["summary"]} for r in rows
               if r["finding_type"] == "GUIDE_REFERENCE" and detail(r).get("section") == "CHECK_METHOD"]
     names = {f.id: f.original_name for f in files}
+    passages = [{"key": r["evidence_key"], **detail(r)} for r in rows
+                if r["finding_type"] == "TEXT_MATCH" and detail(r).get("role") == "REFERENCE_PASSAGE"]
     references = [{"key": r["evidence_key"], "code": detail(r).get("code"), "count": detail(r).get("count"),
                    "file": names.get(r["log_file_id"]), "line": r["line_start"], "entries": detail(r).get("entries", [])}
                   for r in rows if r["finding_type"] == "TEXT_MATCH" and detail(r).get("role") == "REFERENCE_MATCH"]
@@ -74,10 +76,14 @@ def load_report(database: Database, run_id: int) -> dict[str, Any]:
         out = []
         for r in ai_rows:
             d = detail(r)
-            if r["finding_type"] == kind and (role is None or d.get("role") == role):
+            wanted = d.get("role") == role if role is not None else d.get("role") != "ABNORMAL_LIKELIHOOD"
+            if r["finding_type"] == kind and wanted:
                 out.append({"key": r["evidence_key"], "text": r["summary"], "cites": d.get("cites", []),
-                            "counter": d.get("counter", []), "manual_based": d.get("manual_based")})
+                            "counter": d.get("counter", []), "manual_based": d.get("manual_based"),
+                            "likelihood": d.get("likelihood")})
         return out
+
+    overall = ai_items("AI_HYPOTHESIS", "ABNORMAL_LIKELIHOOD")
 
     return {
         "app": f"{APP_NAME} {__version__}",
@@ -93,6 +99,7 @@ def load_report(database: Database, run_id: int) -> dict[str, Any]:
                  for axis, (title, labels) in AXIS_TEXT.items()},
         "guidance": {"level": run["response_guidance"], "items": guidance_items, "checks": checks},
         "references": references,
+        "passages": passages,
         "findings": [{"key": r["evidence_key"], "layer": r["layer"], "type": r["finding_type"], "summary": r["summary"],
                       "file_id": r["log_file_id"], "line": r["line_start"], "case": cases[r["case_id"]].label
                       if r["case_id"] in cases else None, "score": r["similarity"]}
@@ -100,7 +107,8 @@ def load_report(database: Database, run_id: int) -> dict[str, Any]:
         "ai": {"status": run["ai_status"], "status_text": AI_STATUS_TEXT.get(run["ai_status"], run["ai_status"]),
                "model": run["ai_model"], "observations": ai_items("AI_OBSERVATION"),
                "hypotheses": ai_items("AI_HYPOTHESIS"), "response_plan": ai_items("AI_VERIFICATION_STEP", "RESPONSE_PLAN"),
-               "verification_steps": ai_items("AI_VERIFICATION_STEP", "VERIFICATION"), "unknowns": ai_items("AI_UNKNOWN")},
+               "verification_steps": ai_items("AI_VERIFICATION_STEP", "VERIFICATION"), "unknowns": ai_items("AI_UNKNOWN"),
+               "abnormal_likelihood": overall[0] if overall else None},
         "notice": NOTICE,
     }
 
@@ -135,6 +143,11 @@ def reference_lines(ref: dict[str, Any]) -> list[str]:
     return lines
 
 
+def passage_line(passage: dict[str, Any]) -> str:
+    source = passage["document_title"] + (f" · {passage['locator']}" if passage.get("locator") else "")
+    return f"[{source}] {passage['body'][:300]}  (겹친 낱말: {', '.join(passage.get('matched', [])[:6])})"
+
+
 def report_text(data: dict[str, Any]) -> str:
     """화면의 '결과 다시 보기'용 짧은 글."""
     lines = [f"{data['run']['label']} · {data['run']['status']} · 시작 {data['run']['started_at']}"]
@@ -146,11 +159,20 @@ def report_text(data: dict[str, Any]) -> str:
         lines.append("")
         lines.append("[참고 자료 — 로그에 나온 코드]")
         lines += [f"  {line}" for ref in data["references"] for line in reference_lines(ref)]
+    if data.get("passages"):
+        lines.append("")
+        lines.append("[참고 자료 — 관련 문서 내용]")
+        lines += [f"  {passage_line(p)}" for p in data["passages"]]
     lines.append("")
     lines += [f"{a['title']}: {a['text']}" for a in data["axes"].values()]
     lines.append("")
     lines.append(f"AI: {data['ai']['status_text']}")
-    lines += [f"  가설: {h['text']} [{', '.join(h['cites'])}]" for h in data["ai"]["hypotheses"]]
+    overall = data["ai"].get("abnormal_likelihood")
+    if overall:
+        lines.append(f"  비정상일 가능성 {overall['likelihood']}% (AI 추정치 · 통계 확률 아님): {overall['text']}"
+                     f" [{', '.join(overall['cites'])}]")
+    lines += [f"  가설{(' ' + str(h['likelihood']) + '%') if h.get('likelihood') is not None else ''}: {h['text']}"
+              f" [{', '.join(h['cites'])}]" for h in data["ai"]["hypotheses"]]
     lines.append("")
     lines.append(data["notice"])
     return "\n".join(lines)

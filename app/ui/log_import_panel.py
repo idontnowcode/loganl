@@ -37,6 +37,7 @@ from app.models.records import FileMeta, ImportRequest, ImportResult, LogFileRec
 from app.parsers.parser_registry import ParserRegistry
 from app.storage.repositories import EventRepository, LogFileRepository
 from app.ui.log_viewer import LogViewer
+from app.ui.natural_input import Collapsible
 from app.ui.theme import comfortable_table, set_role
 from app.ui.timeline_view import TimelineView
 from app.ui.workers import TaskRunner
@@ -90,6 +91,7 @@ class LogImportPanel(QWidget):
         self._ids: list[int] = []
 
         self.pending = DropList()
+        self.pending.setMaximumHeight(130)  # 옵션을 접은 뒤 대기 목록이 자리를 다 먹지 않게
         self.pending.paths_dropped.connect(self.add_paths)
         self.pending.setToolTip("TXT/LOG 파일을 여기로 끌어 놓으세요")
         add_button = QPushButton("파일 추가…")
@@ -144,7 +146,7 @@ class LogImportPanel(QWidget):
         self.viewer = LogViewer(context.database)
 
         options = QFormLayout()
-        options.addRow("수집 세션", self.session_combo)
+        options.addRow("수집 세션", self.session_combo)  # CR-07 LI-10: 아래 '가져오기 옵션'에 접혀 있다
         options.addRow("세션 이름", self.session_label_edit)
         options.addRow("파서", self.profile_combo)
         options.addRow("로그 역할", self.role_edit)
@@ -158,9 +160,14 @@ class LogImportPanel(QWidget):
         buttons.addWidget(clear_button)
         pending_box.addLayout(buttons)
 
-        top = QHBoxLayout()
-        top.addLayout(pending_box, 1)
-        top.addLayout(options, 1)
+        # CR-07 LI-10: 옵션은 보통 건드릴 일이 없어 접어 둔다(지우지 않음). 대기 목록이 넓게 보인다.
+        options_widget = QWidget()
+        options_widget.setLayout(options)
+        options.setContentsMargins(0, 0, 0, 0)
+        self.options_section = Collapsible("가져오기 옵션 (수집 세션·파서·로그 역할·FW — 보통은 그대로)", options_widget)
+        top = QVBoxLayout()
+        top.addLayout(pending_box)
+        top.addWidget(self.options_section)
 
         run_row = QHBoxLayout()
         run_row.addWidget(self.import_button)

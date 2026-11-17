@@ -41,7 +41,7 @@ def test_upload_review_and_approve(qtbot, ctx, tmp_path: Path) -> None:
     dialog.entry_table.item(0, 3).setText("고친 가상 설명")
     entries = {r["code"]: r for r in dialog.library.entries(doc_id)}
     assert entries["TEST-W010"]["status"] == "EXCLUDED" and entries["TEST-E001"]["description"] == "고친 가상 설명"
-    assert dialog.doc_table.item(0, 3).text() == "2"
+    assert dialog.doc_table.item(0, 3).text() == "2·0"  # 포함 항목 2 · 문단 0
 
     dialog.approve()
     assert "승인했습니다" in dialog.message.text() and dialog.doc_table.item(0, 2).text() == "승인됨"

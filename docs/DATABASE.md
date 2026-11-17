@@ -246,6 +246,14 @@ audit_history (모든 엔터티의 승인·수정·삭제 기록, 추가 전용)
 - 분석은 `approved_reference_entries`(승인 문서 + INCLUDED 항목)로만 읽는다.
 - 분석 결과의 참고 자료 일치는 `analysis_evidence.finding_type = 'TEXT_MATCH'`(이미 있던 값)에 `detail_json.role = 'REFERENCE_MATCH'`로 저장한다. 종류 제약을 바꾸려면 테이블을 다시 만들어야 해서 AI 대응 순서와 같은 방식을 쓴다.
 
+| 0006_questions_passages | `ai_questions`, `reference_passages`(+승인 뷰·잠금 트리거), `cases`의 '승인된 비정상은 증상·판정 기준 필수' CHECK 제거 | CR-07 |
+
+### 0006 LLM 질문·관련 문서 문단 (CR-07)
+
+- `ai_questions`: 사례(로그 하나)마다 LLM 질문. `kind` ∈ GUESS·ASK, `evidence_json`(근거 키·종류·행·글), `status` ∈ OPEN·ANSWERED·SKIPPED·OBSOLETE, `answer` ∈ YES·NO·UNKNOWN·TEXT, `answer_text`, `dedup_key`(같은 사례에서 유일). 뷰 `confirmed_ai_answers`: 승인된 사례의 답(맞음·틀림·글)만.
+- `reference_passages`: 참고 자료 문서의 문단(코드 항목으로 뽑히지 않은 글). 승인·보관된 문서의 문단은 넣기·고치기·지우기 막힘. 뷰 `approved_reference_passages`.
+- `cases`: 0001의 CHECK 하나를 SQLite 공식 절차(`PRAGMA writable_schema`)로 CREATE TABLE 문에서 뺀다. 표를 다시 만들지 않는다(외래 키 연쇄 삭제 방지). 같은 스크립트의 CREATE TABLE이 스키마 번호를 올려 모든 연결이 새 정의를 읽는다. 0001 파일은 그대로다(체크섬).
+
 ### 결정·관례 (Phase 3~7)
 
 - **승인 사례 수정 중**(수정 시작 → DRAFT)에는 승인 뷰에서 빠진다. 다시 승인하면 개정본이 하나 늘고 이전 개정본은 보존된다(§5 미결 항목을 결정함).

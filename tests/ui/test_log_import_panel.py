@@ -80,3 +80,10 @@ def test_remove_from_panel_and_set_ids(qtbot, panel: LogImportPanel, tmp_path: P
 def test_empty_request_message(panel: LogImportPanel) -> None:
     panel.start_import()
     assert "먼저 추가" in panel.message_label.text()
+
+
+def test_import_options_are_folded(panel: LogImportPanel) -> None:  # CR-07 LI-10
+    assert not panel.options_section.is_expanded() and panel.options_section.content.isHidden()
+    assert panel.session_combo.parent() is not None  # 지우지 않고 접어 두었다
+    panel.options_section.toggle.click()
+    assert not panel.options_section.content.isHidden()

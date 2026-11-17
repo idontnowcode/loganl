@@ -57,6 +57,13 @@ def render_html(data: dict[str, Any]) -> str:
                                                        for name in ("title", "description", "cause", "action"))
                              + f"<td>{_e(source)}</td></tr>")
         parts.append("</table>")
+    if data.get("passages"):
+        parts.append("<h2>참고 자료 — 관련 문서 내용 (로그와 낱말이 겹치는 문단)</h2><ul>")
+        for passage in data["passages"]:
+            source = passage["document_title"] + (f" · {passage['locator']}" if passage.get("locator") else "")
+            parts.append(f"<li>{_e(passage['body'])} <span class='key'>[{_e(source)} · 겹친 낱말 "
+                         f"{_e(', '.join(passage.get('matched', [])[:6]))}]</span></li>")
+        parts.append("</ul>")
     parts.append("<h2>결과 분류 (서로 독립)</h2><table>")
     parts += [f"<tr><th>{_e(a['title'])}</th><td>{_e(a['text'])}</td></tr>" for a in data["axes"].values()]
     parts.append("</table><h2>입력 로그</h2><table><tr><th>파일</th><th>세션</th><th>시각 기준</th><th>SHA-256</th></tr>")
@@ -67,6 +74,10 @@ def render_html(data: dict[str, Any]) -> str:
               f"<td>{_e(f['summary'])}</td><td>{_e(f['line'])}</td></tr>" for f in data["findings"]]
     ai = data["ai"]
     parts.append(f"</table><h2>AI 원인 가설 — {_e(ai['status_text'])} {_e(ai['model'] or '')}</h2>")
+    overall = ai.get("abnormal_likelihood")
+    if overall:
+        parts.append(f"<p><b>비정상일 가능성 {_e(overall['likelihood'])}%</b> <span class='key'>(AI 추정치 · 통계 확률 아님)</span> "
+                     f"{_e(overall['text'])} <span class='key'>[{_e(', '.join(overall['cites']))}]</span></p>")
     for title, items in (("관측 사실", ai["observations"]), ("원인 가설", ai["hypotheses"]),
                          ("AI가 정리한 대응 순서(승인된 매뉴얼·가이드 근거)", ai["response_plan"]),
                          ("추가 확인 절차", ai["verification_steps"]), ("판단 불가", ai["unknowns"])):
@@ -76,7 +87,8 @@ def render_html(data: dict[str, Any]) -> str:
         for item in items:
             counter = f" · 반대 근거 {_e(', '.join(item['counter']))}" if item.get("counter") else ""
             tag = "" if item.get("manual_based") or title != "추가 확인 절차" else " (AI 제안 — 매뉴얼 근거 없음)"
-            parts.append(f"<li>{_e(item['text'])}{_e(tag)} <span class='key'>[{_e(', '.join(item['cites']))}]{counter}</span></li>")
+            chance = f"<b>{_e(item['likelihood'])}%</b> " if item.get("likelihood") is not None else ""
+            parts.append(f"<li>{chance}{_e(item['text'])}{_e(tag)} <span class='key'>[{_e(', '.join(item['cites']))}]{counter}</span></li>")
         parts.append("</ul>")
     parts.append(f"<p class='notice'>{_e(data['notice'])}</p></body></html>")
     return "".join(parts)

@@ -25,7 +25,7 @@ def test_first_run_creates_folders_settings_and_db(tmp_path: Path) -> None:
         for directory in ctx.paths.all_dirs():
             assert directory.is_dir(), directory
         assert ctx.paths.db_file.exists()
-        assert ctx.schema_version == 5
+        assert ctx.schema_version == 6
         assert ctx.capabilities.fts5
         assert ctx.warnings == []
     finally:
@@ -48,7 +48,7 @@ def test_restart_keeps_data_and_does_not_reapply(tmp_path: Path) -> None:
             names = [r[0] for r in conn.execute("SELECT name FROM mode_definitions")]
             migrations = conn.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0]
         assert names == ["재시작 확인 모드"]
-        assert migrations == 5
+        assert migrations == 6
     finally:
         again.close()
 
@@ -105,7 +105,7 @@ def test_app_log_is_written_and_released(tmp_path: Path) -> None:
     log_file = ctx.paths.logs / "app.log"
     ctx.close()
     text = log_file.read_text(encoding="utf-8")
-    assert "시작" in text and "스키마 v5" in text
+    assert "시작" in text and "스키마 v6" in text
     log_file.unlink()  # 핸들러가 파일을 놓았는지(Windows 잠금) 확인
 
 
@@ -130,6 +130,6 @@ def test_check_command(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.M
     out = capsys.readouterr().out
     assert "점검" in out
     assert str(isolated_home) in out
-    assert "스키마 v5" in out
+    assert "스키마 v6" in out
     assert "Ollama: 연결 안 됨" in out
     assert "결과: 기반 정상" in out

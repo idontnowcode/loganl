@@ -53,8 +53,8 @@ def case(ctx, tmp_path: Path):
 def test_guide_is_optional_for_approval(ctx, case) -> None:  # AL-02 → CR-06 LI-05
     case_id, _ = case
     workflow = ApprovalWorkflow(ctx.database)
-    blocked = workflow.check(case_id)
-    assert any("오류 증상" in b for b in blocked.blocking) and any("판정 기준" in b for b in blocked.blocking)
+    bare = workflow.check(case_id)
+    assert bare.ok and any("판단 가이드" in w for w in bare.warnings)  # CR-07 LI-09: 판단 가이드도 선택
     CaseManager(ctx.database).update(case_id, symptom="증상", abnormal_criteria="기준")
     check = workflow.check(case_id)
     assert check.ok  # 가이드·원인 확정 여부 없이도 승인할 수 있다

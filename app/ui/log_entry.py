@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+import shiboken6
 from PySide6.QtCore import QItemSelectionModel, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -30,11 +31,16 @@ from PySide6.QtWidgets import (
 )
 
 from app.bootstrap import AppContext
+from app.learning.ai_questions import AiQuestionService, QuestionOutcome
+from app.learning.case_manager import CaseError
 from app.learning.log_entry import LABELS, LogEntry, LogEntryError, LogEntryService
+from app.learning.normal_learner import default_client_factory
 from app.models.enums import OriginPurpose
+from app.ui.ai_questions_box import AiQuestionsBox
 from app.ui.log_import_panel import LogImportPanel
 from app.ui.natural_input import StatusLine
 from app.ui.theme import comfortable_table, scroll_wrap, set_role
+from app.ui.workers import TaskRunner
 
 ENTRY_COLUMNS = ("파일", "구분", "동작 메모", "상태")
 SAVED_COLUMNS = ("파일", "구분", "동작 메모", "저장 시각")
@@ -56,6 +62,11 @@ class LogEntryPage(QWidget):
         self.context = context
         self.service = LogEntryService(context.database)
         self.open_detail = open_detail
+        # CR-07: 저장하면 AI가 그 로그를 보고 질문을 만든다(백그라운드, 한 번에 하나씩)
+        self.questions = AiQuestionService(context.database, context.settings,
+                                           client_factory or default_client_factory(context.settings))
+        self.ai_runner = TaskRunner(self)
+        self._question_queue: list[int] = []
         self._entries: list[LogEntry] = []
         self._drafts: dict[int, Draft] = {}  # 저장하지 않은 입력(파일별)
         self._loading = False
@@ -67,8 +78,8 @@ class LogEntryPage(QWidget):
         self.runner = self.import_panel.runner
 
         steps = QLabel("진행 순서  ① 왼쪽에 로그를 끌어 놓고 가져오기 → ② 아래 목록에서 로그를 고르기(여러 개 가능) → "
-                       "③ 정상/비정상, 어떤 동작이었는지 메모, 비정상이면 에러로 판단한 근거 → ④ 저장. "
-                       "저장하면 바로 학습에 쓰입니다.")
+                       "③ 정상/비정상 고르기(필수), 메모·판단 가이드(선택) → ④ 저장. 저장하면 바로 학습에 쓰이고, "
+                       "AI가 그 로그를 보고 궁금한 점을 'AI 질문'에 남깁니다(답은 선택).")
         steps.setWordWrap(True)
         set_role(steps, "hint")
 
@@ -106,16 +117,16 @@ class LogEntryPage(QWidget):
         label_row.addWidget(self.normal_radio)
         label_row.addWidget(self.abnormal_radio)
         label_row.addStretch(1)
-        self.memo_label = QLabel("어떤 동작을 했었나요?")
+        self.memo_label = QLabel("메모 (선택) — 어떤 동작이었는지 등")
         set_role(self.memo_label, "cell-label")
         self.memo_edit = QPlainTextEdit()
         self.memo_edit.setPlaceholderText("예) ○○ 동작을 처음부터 끝까지 한 번 돌림")
         self.memo_edit.setFixedHeight(76)
         self.memo_edit.setTabChangesFocus(True)
-        self.criteria_label = QLabel("어떻게 에러라고 판단했나요? (비정상일 때)")
+        self.criteria_label = QLabel("판단 가이드 (선택) — 어떻게 에러로 판단하는지")
         set_role(self.criteria_label, "cell-label")
         self.criteria_edit = QPlainTextEdit()
-        self.criteria_edit.setPlaceholderText("예) 화면에 TEST-E001이 뜨고 멈춰서 에러로 봄")
+        self.criteria_edit.setPlaceholderText("예) 화면에 TEST-E001이 뜨고 멈추면 에러로 봄. 적어 두면 다음 분석에 씁니다.")
         self.criteria_edit.setFixedHeight(76)
         self.criteria_edit.setTabChangesFocus(True)
         for widget in (self.memo_edit, self.criteria_edit):
@@ -166,10 +177,13 @@ class LogEntryPage(QWidget):
         saved_layout.addWidget(self.saved_table)
         saved_layout.addWidget(saved_hint)
 
+        self.questions_box = AiQuestionsBox(self.answer_question, self.skip_question, self.ask_again)
+
         side = QVBoxLayout()
         side.addWidget(steps)
         side.addWidget(list_box)
         side.addWidget(editor_box)
+        side.addWidget(self.questions_box)
         side.addWidget(saved_box)
         side.addStretch(1)
         side_widget = QWidget()
@@ -191,6 +205,7 @@ class LogEntryPage(QWidget):
 
         self.refresh_entries()
         self.refresh_saved()
+        self.refresh_questions()
 
     # ── 목록 ──
     def refresh_entries(self, select: list[int] | None = None) -> None:
@@ -343,14 +358,14 @@ class LogEntryPage(QWidget):
             if entry.revision != before.revision or entry.case_id != before.case_id:
                 saved += 1
                 self.entry_saved.emit(entry.case_id)
+                self.queue_questions([entry.case_id])
         return saved, ""
 
     def autosave(self, only: list[int] | None = None) -> int:
-        """탭을 바꾸거나 앱을 닫을 때, 다른 줄로 옮길 때: 다 적은 입력(구분이 있고 비정상이면 근거도 있음)만 저장한다.
-        덜 적은 입력은 '입력 중'으로 남겨 둔다(지우지 않음)."""
+        """탭을 바꾸거나 앱을 닫을 때, 다른 줄로 옮길 때: 정상/비정상을 고른 입력은 저장한다.
+        구분을 고르지 않은 입력은 '입력 중'으로 남겨 둔다(지우지 않음)."""
         self._keep_draft()
-        ready = [i for i, d in self._drafts.items()
-                 if (only is None or i in only) and d.label and (d.label == "NORMAL" or d.criteria.strip())]
+        ready = [i for i, d in self._drafts.items() if (only is None or i in only) and d.label]
         if not ready:
             return 0
         saved, error = self._save_drafts(ready)
@@ -361,6 +376,62 @@ class LogEntryPage(QWidget):
         self.refresh_saved()
         return saved
 
+    # ── AI 질문 (CR-07) ──
+    def queue_questions(self, case_ids: list[int]) -> None:
+        if not self.context.settings.ollama.model:  # 모델이 없으면 백그라운드 작업을 띄우지 않는다
+            self.questions_box.status.setText(QuestionOutcome("NO_MODEL").message(""))
+            return
+        for case_id in case_ids:
+            if case_id not in self._question_queue:
+                self._question_queue.append(case_id)
+        self._next_question()
+
+    def _next_question(self) -> None:
+        if self.ai_runner.busy or not self._question_queue:
+            return
+        case_id = self._question_queue.pop(0)
+        name = self._case_file_name(case_id)
+        self.questions_box.status.setText(f"AI가 {name}을(를) 보고 질문을 만드는 중…")
+        self.ai_runner.start(self.questions.generate, case_id,
+                             on_done=lambda outcome: self._on_questions(name, outcome),
+                             on_error=lambda message: self._on_questions(name, QuestionOutcome("AI_UNAVAILABLE",
+                                                                                               errors=[message])))
+
+    def _on_questions(self, name: str, outcome: QuestionOutcome) -> None:
+        if not shiboken6.isValid(self.questions_box):  # 작업이 끝나기 전에 화면이 닫혔다(질문은 DB에 이미 저장됨)
+            return
+        self.questions_box.status.setText(outcome.message(name))
+        self.refresh_questions()
+        self._next_question()
+
+    def _case_file_name(self, case_id: int) -> str:
+        entry = next((e for e in self._entries if e.case_id == case_id), None)
+        return entry.file_name if entry else f"사례 {case_id}"
+
+    def refresh_questions(self) -> None:
+        self.questions_box.show_questions(self.questions.questions())
+
+    def answer_question(self, question_id: int, answer: str, text: str | None) -> None:
+        try:
+            self.questions.answer(question_id, answer, text)
+        except CaseError as exc:
+            self.questions_box.status.setText(str(exc))
+            return
+        self.questions_box.status.setText("답을 저장했습니다. 다음 분석부터 AI가 참고합니다."
+                                          if answer != "UNKNOWN" else "'모름'으로 남겼습니다. 같은 질문은 다시 하지 않습니다.")
+        self.refresh_questions()
+
+    def skip_question(self, question_id: int) -> None:
+        self.questions.skip(question_id)
+        self.refresh_questions()
+
+    def ask_again(self) -> None:
+        saved = [e.case_id for e in self.selected_entries() if e.case_id is not None]
+        if not saved:
+            self.questions_box.status.setText("저장된 로그를 목록에서 고르세요.")
+            return
+        self.queue_questions(saved)
+
     # ── 다른 화면과 잇기 ──
     def receive(self, log_file_ids: list[int], label: str | None = None) -> None:
         """신규 분석의 '학습 사례로 등록': 로그를 목록에 올리고 구분을 미리 골라 둔다(저장은 사용자가)."""
@@ -370,7 +441,7 @@ class LogEntryPage(QWidget):
                 entry = self.service.entry(log_file_id)
                 self._drafts[log_file_id] = Draft(label, entry.memo, entry.criteria)
         self.refresh_entries(select=list(log_file_ids))
-        self.message.setText("분석한 로그를 올렸습니다. 동작 메모(비정상이면 판단 근거도)를 적고 저장하세요.")
+        self.message.setText("분석한 로그를 올렸습니다. 필요하면 메모를 적고 저장하세요.")
 
     def bring_saved(self, row: int) -> None:
         item = self.saved_table.item(row, 0)

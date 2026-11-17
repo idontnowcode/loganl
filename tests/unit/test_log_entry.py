@@ -55,10 +55,11 @@ def test_save_normal_approves_at_once(ctx, files) -> None:
     assert entry.saved and entry.state_text() == "저장됨 (개정본 1)"
 
 
-def test_save_abnormal_needs_reason_and_fills_both_columns(ctx, files) -> None:
+def test_save_abnormal_guide_optional_and_fills_both_columns(ctx, files) -> None:  # CR-07 LI-09
     service = LogEntryService(ctx.database)
-    with pytest.raises(LogEntryError, match="판단한 근거"):
-        service.save(files[1], "ABNORMAL", "가상 동작", "  ")
+    bare = service.save(files[1], "ABNORMAL", "", "  ")  # 메모·판단 가이드 없이도 저장(승인)된다
+    bare_case = CaseManager(ctx.database).get(bare.case_id)
+    assert bare_case.status == "APPROVED" and bare_case.symptom is None and bare_case.abnormal_criteria is None
     entry = service.save(files[1], "ABNORMAL", "가상 동작", "TEST-E001이 두 번 나와서 에러로 봄")
     case = CaseManager(ctx.database).get(entry.case_id)
     assert case.status == "APPROVED" and case.cause_status is None

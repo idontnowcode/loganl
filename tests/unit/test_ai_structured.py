@@ -162,3 +162,40 @@ def test_diagnosis_prompt_lists_allowed_keys_per_field() -> None:
     assert response in plan_line and guide in plan_line and event not in plan_line
     assert "(없음)" in key_guide(EvidencePackage())
     assert "한국어" in DATA_RULES and "영어" in DATA_RULES
+
+
+def test_v11_likelihood_rules() -> None:  # CR-07 AO-01
+    from app.ai.diagnosis import DiagnosisAnswer, DiagnosisContext, rules
+
+    package = EvidencePackage()
+    event = package.add("EVENT", "TEST-SUB TEST-FAULT")
+    check = next(r for r in rules(DiagnosisContext(package, "요약")) if r.__name__ == "v11_likelihood")
+
+    def answer(**fields) -> DiagnosisAnswer:
+        return DiagnosisAnswer.model_validate(fields)
+
+    ok = answer(abnormal_likelihood=70, likelihood_evidence=[event],
+                hypotheses=[{"text": "가상 원인일 수 있다", "evidence": [event], "likelihood": 40},
+                            {"text": "다른 가상 원인일 수 있다", "evidence": [event], "likelihood": 30}])
+    assert check(ok) == []
+    assert any("0~100" in e for e in check(answer(abnormal_likelihood=120, likelihood_evidence=[event])))
+    assert any("합이 100" in e for e in check(answer(hypotheses=[
+        {"text": "a일 수 있다", "evidence": [event], "likelihood": 70},
+        {"text": "b일 수 있다", "evidence": [event], "likelihood": 50}])))
+    assert any("근거 키" in e for e in check(answer(abnormal_likelihood=60)))
+    assert any("V-3" in e for e in check(answer(abnormal_likelihood=60, likelihood_evidence=["EV-9999"])))
+    assert check(answer()) == []  # 매기지 않아도 된다(화면에 '매기지 않음'으로 표시)
+
+
+def test_evidence_keys_in_text_are_not_codes() -> None:  # CR-07 실제 모델 점검에서 찾은 V-4 오판
+    from app.ai.diagnosis import DiagnosisAnswer, DiagnosisContext, code_tokens, rules
+
+    assert code_tokens("EV-0001과 QA-0002를 보면 TEST-E001이 있다") == ["TEST-E001"]
+    package = EvidencePackage()
+    event = package.add("EVENT", "TEST-SUB TEST-FAULT 줄")
+    ctx = DiagnosisContext(package, "요약")
+    v4 = next(r for r in rules(ctx) if r.__name__ == "v4_observations")
+    answer = DiagnosisAnswer.model_validate({"observations": [{"text": f"{event}에서 TEST-FAULT가 보인다", "evidence": [event]}]})
+    assert v4(answer) == []
+    wrong = DiagnosisAnswer.model_validate({"observations": [{"text": "TEST-E999가 보인다", "evidence": [event]}]})
+    assert v4(wrong)  # 진짜 없는 코드는 여전히 막는다

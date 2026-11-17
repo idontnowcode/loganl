@@ -67,9 +67,7 @@ def test_save_normal_and_abnormal(page, ctx) -> None:
     select(page, 2)
     page.abnormal_radio.setChecked(True)
     page.memo_edit.setPlainText("가상 동작")
-    assert not page.save_selected()  # 판단 근거 없이 비정상은 안 된다
-    assert "판단한 근거" in page.message.text()
-    page.criteria_edit.setPlainText("TEST-E001이 두 번 나와서 에러로 봄")
+    page.criteria_edit.setPlainText("TEST-E001이 두 번 나와서 에러로 봄")  # 판단 가이드(선택)
     assert page.save_selected()
     case = CaseManager(ctx.database).get(page.service.entry(page.selected_ids()[0]).case_id)
     assert (case.case_type, case.status, case.abnormal_criteria) == ("ABNORMAL", "APPROVED", "TEST-E001이 두 번 나와서 에러로 봄")
@@ -85,17 +83,19 @@ def test_multi_select_applies_same_content(page) -> None:
     assert page.saved_table.rowCount() == 2
 
 
-def test_switching_rows_autosaves_complete_input_and_keeps_incomplete(page) -> None:
+def test_switching_rows_autosaves_labeled_input_and_keeps_unlabeled(page) -> None:
     page.normal_radio.setChecked(True)
     page.memo_edit.setPlainText("다른 줄로 옮기면 저장")
-    select(page, 2)  # 다 적은 입력(정상 + 메모)은 자동 저장
+    select(page, 2)  # 구분을 고른 입력은 자동 저장
     assert rows(page)[0][3] == "저장됨 (개정본 1)"
-    page.abnormal_radio.setChecked(True)
-    page.memo_edit.setPlainText("근거를 아직 안 씀")
-    select(page, 1)  # 덜 적은 비정상 입력은 '입력 중'으로 남는다(지우지 않음)
-    assert rows(page)[2][3] == "입력 중 (저장 전)" and rows(page)[2][1] == "비정상"
+    page.memo_edit.setPlainText("구분을 아직 안 고름")
+    select(page, 1)  # 구분이 없는 입력은 '입력 중'으로 남는다(지우지 않음)
+    assert rows(page)[2][3] == "입력 중 (저장 전)" and rows(page)[2][1] == "—"
     select(page, 2)
-    assert page.abnormal_radio.isChecked() and page.memo_edit.toPlainText() == "근거를 아직 안 씀"
+    assert page.memo_edit.toPlainText() == "구분을 아직 안 고름"
+    page.abnormal_radio.setChecked(True)  # 판단 가이드 없이 비정상만 골라도
+    select(page, 1)
+    assert rows(page)[2][1:4:2] == ("비정상", "저장됨 (개정본 1)")  # 저장된다(CR-07 LI-09)
 
 
 def test_bring_saved_back_and_edit(page) -> None:
@@ -111,3 +111,56 @@ def test_bring_saved_back_and_edit(page) -> None:
     page.save_selected()
     assert rows(page)[0][2:] == ("고친 메모", "저장됨 (개정본 2)")
     assert page.detail_button.isEnabled()
+
+
+def test_saving_asks_ai_questions_and_answers_are_kept(qtbot, ctx, tmp_path: Path) -> None:  # CR-07 QA-01·02
+    from app.learning.ai_questions import knowledge_texts
+    from tests.fake_ollama import FakeOllama
+
+    ctx.settings = ctx.settings.model_copy(
+        update={"ollama": ctx.settings.ollama.model_copy(update={"model": "test-model:7b"})})
+    ids = LogImporter(ctx.database, ctx.paths, ctx.settings.import_).import_logs(ImportRequest(
+        paths=[abnormal_log(tmp_path / "q.log")], purpose=OriginPurpose.NORMAL_CASE,
+        session_mode=SessionMode.SEPARATE)).log_file_ids
+    fake = FakeOllama([{"questions": [
+        {"kind": "GUESS", "text": "TEST-RETRY 뒤에 멈춘 것으로 보이는데 맞나요?", "reason": "가상", "evidence": ["EV-0003"]},
+        {"kind": "ASK", "text": "TEST-INIT은 어떤 단계인가요?", "evidence": []}]}])
+    page = LogEntryPage(ctx, client_factory=fake.factory)
+    qtbot.addWidget(page)
+    assert page.questions_box.empty.isVisibleTo(page)
+    page.import_panel.set_log_file_ids(ids)
+    page.abnormal_radio.setChecked(True)
+    assert page.save_selected()
+    qtbot.waitUntil(lambda: not page.ai_runner.busy and len(page.questions_box.cards) == 2, timeout=15_000)
+    assert "질문 2개" in page.questions_box.status.text(), page.questions_box.status.text()
+    guess = next(c for c in page.questions_box.cards if c.view.kind == "GUESS")
+    assert guess.view.file_name == "q.log"
+    guess.edit.setText("가상 한마디")
+    guess.buttons["YES"].click()
+    assert len(page.questions_box.cards) == 1 and "다음 분석부터" in page.questions_box.status.text()
+    ask = page.questions_box.cards[0]
+    ask.buttons["TEXT"].click()  # 빈 답은 받지 않는다
+    assert "답을 적어" in page.questions_box.status.text() and len(page.questions_box.cards) == 1
+    ask.buttons["SKIP"].click()
+    assert page.questions_box.cards == [] and page.questions_box.empty.isVisibleTo(page)
+    case_id = page.service.entry(ids[0]).case_id
+    assert knowledge_texts(ctx.database, [case_id]) == [
+        "[사용자 확인] AI 추측 'TEST-RETRY 뒤에 멈춘 것으로 보이는데 맞나요?' → 사용자가 맞다고 확인 — 사용자 설명: 가상 한마디"]
+
+
+def test_no_model_does_not_start_background_work(page) -> None:  # 닫힌 화면에 늦은 결과가 닿지 않게
+    page.normal_radio.setChecked(True)
+    assert page.save_selected()
+    assert not page.ai_runner.busy and "모델" in page.questions_box.status.text()
+
+
+def test_late_result_after_close_is_ignored(qtbot, ctx) -> None:
+    from app.learning.ai_questions import QuestionOutcome
+
+    widget = LogEntryPage(ctx)
+    qtbot.addWidget(widget)
+    box = widget.questions_box
+    import shiboken6
+
+    shiboken6.delete(box)  # 화면이 먼저 닫힌 것처럼
+    widget._on_questions("x.log", QuestionOutcome("OK"))  # 예외 없이 넘어간다

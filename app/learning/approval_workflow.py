@@ -62,17 +62,15 @@ class ApprovalWorkflow:
         result = ApprovalCheck()
         if not CaseRepository(conn).log_file_ids(case_id):
             result.blocking.append("로그 파일이 하나도 없습니다.")
-        # CR-06 LI-05: 정상은 로그만, 비정상은 로그 + 증상·판정 기준(DB 제약). 나머지는 선택이고 경고만 한다.
+        # CR-06 LI-05, CR-07 LI-09: 정상·비정상 모두 로그만 있으면 된다. 나머지는 선택이고 경고만 한다.
         if case.case_type == "NORMAL":
             if case.mode_id is None or not case.mode_confirmed:
                 result.warnings.append("운전 모드가 없습니다(선택). 분석할 때 가장 비슷한 정상 로그와 비교하고, "
                                        "패턴은 확정할 수 없습니다.")
         else:
             guides = GuideRepository(conn)
-            if _blank(case.symptom):
-                result.blocking.append("오류 증상을 입력해야 합니다.")
-            if _blank(case.abnormal_criteria):
-                result.blocking.append("비정상 판정 기준(에러로 판단한 근거)을 입력해야 합니다.")
+            if _blank(case.abnormal_criteria) and _blank(case.symptom):
+                result.warnings.append("판단 가이드(어떻게 에러로 판단했는지)가 없습니다(선택). 적어 두면 다음 분석에 씁니다.")
             if case.cause_status is None:
                 result.warnings.append("원인 확정 여부를 적지 않았습니다(선택). AI 진단은 원인을 가설로만 씁니다.")
             if not guides.attachments(case_id, "DIAGNOSTIC_GUIDE") and not guides.attachments(case_id, "RESPONSE_MANUAL"):

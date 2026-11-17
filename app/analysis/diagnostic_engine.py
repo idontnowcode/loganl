@@ -23,7 +23,7 @@ from app.analysis.case_retriever import (
     normal_types_for_cases,
     reference_normals,
 )
-from app.analysis.reference_matcher import ReferenceMatch, match_references
+from app.analysis.reference_matcher import PassageHit, ReferenceMatch, match_passages, match_references
 from app.analysis.result_builder import ResponseGuidance, build_response_guidance
 from app.config import AppSettings
 from app.core.cancel import NEVER_CANCEL, Cancelled, CancelToken
@@ -70,6 +70,7 @@ class AnalysisResult:
     merged_files: set[int] = field(default_factory=set)  # 시각으로 한 시간축에 합친 파일
     ai: Any = None  # DiagnosisOutcome
     references: list[ReferenceMatch] = field(default_factory=list)  # 참고 자료 — 로그에 나온 코드 (CR-04)
+    passages: list[PassageHit] = field(default_factory=list)  # 참고 자료 — 관련 문서 내용 (CR-07)
 
 
 @dataclass
@@ -184,13 +185,17 @@ class DiagnosticEngine:
                 event_id=match.first_event_id, line_start=match.first_line,
                 detail={"role": "REFERENCE_MATCH", "code": match.code, "count": match.count, "via": match.via,
                         "entries": [hit.as_dict() for hit in match.entries]}))
+        passages = match_passages(self.database, request.log_file_ids, request.user_description)
+        for hit in passages:
+            findings.append(Finding("RETRIEVAL", "TEXT_MATCH", hit.summary(),
+                                    detail={"role": "REFERENCE_PASSAGE", **hit.as_dict()}))
 
         axes = self._axes(request, features, findings, patterns, similar_normal, similar_abnormal, guidance,
                           any_normal, any_abnormal, normal_types, reference_found=bool(reference))
         keys = self._store(run_id, findings)
         self._finish(run_id, status="COMPLETED", **axes)
         result = AnalysisResult(run_id, axes, findings, similar_normal, similar_abnormal, guidance, keys, notes,
-                                merged_files, references=references)
+                                merged_files, references=references, passages=passages)
         report(4, STEPS, "결정론·검색 단계 완료")
         if request.use_ai:
             result.ai = self.ai_layer(result, request, cancel)
@@ -244,9 +249,12 @@ class DiagnosticEngine:
         if not model:
             self._finish(result.run_id, ai_status="NOT_RUN", error_message="Ollama 모델 미지정으로 AI 단계를 건너뜀")
             return DiagnosisOutcome("NOT_RUN", errors=["설정에서 사용할 Ollama 모델을 고르지 않았습니다."])
+        from app.learning.ai_questions import case_knowledge, knowledge_texts
+
         package = EvidencePackage()
         kinds: dict[str, str] = {}
         confirmed: set[str] = set()
+        similar_cases = {s.case.id: s.case for s in result.similar_normal + result.similar_abnormal}
         event_ids = [f.event_id for f in result.findings if f.event_id]
         with closing(self.database.connect()) as conn:
             raw = {e.id: e.raw_text for e in EventRepository(conn).get_many(event_ids)}
@@ -255,6 +263,10 @@ class DiagnosticEngine:
             kind = {"SIMILAR_NORMAL_CASE": "CASE", "SIMILAR_ABNORMAL_CASE": "CASE", "GUIDE_REFERENCE": "GUIDE",
                     "RESPONSE_REFERENCE": "RESPONSE"}.get(finding.finding_type, "FINDING")
             text = f"[{finding.finding_type}] {finding.summary}"
+            if finding.detail.get("role") == "REFERENCE_PASSAGE":  # CR-07: 승인된 일반 문서 문단
+                kind = "REFERENCE"
+                text = f"[참고 자료 문단] {finding.detail['document_title']}" + (
+                    f" · {finding.detail['locator']}" if finding.detail.get("locator") else "") + f": {finding.detail['body']}"
             if finding.detail.get("role") == "REFERENCE_MATCH":
                 # 승인된 참고 자료(사용자 코드 사전): 코드 뜻의 근거로만 쓴다(V-5). 관측 사실·대응 순서 근거는 아님.
                 kind = "REFERENCE"
@@ -266,11 +278,19 @@ class DiagnosticEngine:
                     for e in finding.detail["entries"][:3])
             if finding.event_id in raw:
                 text += f"\n원문({finding.line_start}행): {raw[finding.event_id][:300]}"
+            if kind == "CASE" and finding.case_id in similar_cases:  # CR-07 AO-02: 사용자 판정·메모·판단 가이드
+                text += "\n" + case_knowledge(similar_cases[finding.case_id])
             package.add_with_key(key, kind, text, log_file_id=finding.log_file_id, event_id=finding.event_id,
                                  case_id=finding.case_id, guide_item_id=finding.guide_item_id)
             kinds[key] = kind
             if finding.detail.get("cause_status") == "CONFIRMED":
                 confirmed.add(key)
+        # CR-07 QA-03: 비슷한 승인 로그에 사용자가 답한 내용(맞음·틀림·글)은 승인 지식 ANSWER로 준다.
+        relevant = [s.case.id for s in result.similar_normal + result.similar_abnormal if s.relevant]
+        for number, text in enumerate(knowledge_texts(self.database, relevant), start=1):
+            key = f"QA-{number:04d}"
+            package.add_with_key(key, "ANSWER", text)
+            kinds[key] = "ANSWER"
         axes_text = ", ".join(f"{k}={v}" for k, v in result.axes.items())
         summary = (f"결과 축: {axes_text}\n운전 모드 확인: {'예' if request.mode_confirmed else '아니오'}\n"
                    f"운전 조건: {request.operating_conditions or '없음'}\n사용자 설명: {request.user_description or '없음'}\n"
@@ -322,8 +342,12 @@ class DiagnosticEngine:
                 add("AI_OBSERVATION", obs.text, obs.evidence)
                 claims.add(claim_text=obs.text, claim_kind="FACT", source="AI", analysis_run_id=run_id,
                            evidence=refs(obs.evidence))
+            if answer.abnormal_likelihood is not None:  # CR-07 AO-01: AI 추정치(통계 확률 아님)
+                add("AI_HYPOTHESIS", answer.likelihood_reason or "비정상일 가능성", answer.likelihood_evidence,
+                    role="ABNORMAL_LIKELIHOOD", likelihood=answer.abnormal_likelihood)
             for hyp in answer.hypotheses:
-                add("AI_HYPOTHESIS", hyp.text, hyp.evidence, stance="SUPPORTS", counter=hyp.counter_evidence)
+                add("AI_HYPOTHESIS", hyp.text, hyp.evidence, stance="SUPPORTS", counter=hyp.counter_evidence,
+                    likelihood=hyp.likelihood)
                 if hyp.counter_evidence:
                     add("AI_COUNTER_EVIDENCE", f"반대 근거: {hyp.text[:80]}", hyp.counter_evidence, stance="CONTRADICTS")
                 claims.add(claim_text=hyp.text, claim_kind="HYPOTHESIS", source="AI", analysis_run_id=run_id,
@@ -345,7 +369,9 @@ class DiagnosticEngine:
         types = {f.finding_type for f in findings}
         violations = types & {"MISSING_EVENT", "ORDER_VIOLATION"}
         suspects = types & {"EXPLICIT_ERROR", "REPETITION", "LATENCY"}
-        has_normal_knowledge = bool(patterns) or normal_types is not None
+        # 모드 없이 분석하면 승인된 정상 로그 전체와 비교했으므로, 정상 로그가 하나라도 있으면 '판단 못 함'이 아니라
+        # 점수대로 일치·일부·불일치로 본다(비슷한 것이 없으면 불일치, CR-07 화면 점검).
+        has_normal_knowledge = bool(patterns) or normal_types is not None or (request.mode_id is None and any_normal)
         best_normal = max((s.similarity for s in similar_normal), default=0.0)
         if not has_normal_knowledge:
             normal_match = "NOT_EVALUATED"

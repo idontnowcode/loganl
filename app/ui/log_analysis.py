@@ -218,13 +218,17 @@ class LogAnalysisPage(QWidget):
         self.findings_table.setMinimumHeight(180)
         self.findings_table.cellDoubleClicked.connect(self.jump_to_finding)
 
-        self.ai_box = QGroupBox("AI 원인 가설 (로컬 Ollama · 사용자 검토 필요)")
+        self.ai_box = QGroupBox("AI 분석 의견 (로컬 Ollama · 가능성은 AI 추정치 · 사용자 검토 필요)")
         ai_layout = QVBoxLayout(self.ai_box)
         self.ai_status = QLabel("아직 실행하지 않았습니다.")
         self.ai_status.setWordWrap(True)
+        self.ai_likelihood = QLabel()  # CR-07: 비정상일 가능성(AI 추정치)
+        set_role(self.ai_likelihood, "cell-value", "neutral")
+        self.ai_likelihood.hide()
         self.ai_view = QPlainTextEdit()
         self.ai_view.setReadOnly(True)
         self.ai_view.setMinimumHeight(120)
+        ai_layout.addWidget(self.ai_likelihood)
         ai_layout.addWidget(self.ai_status)
         ai_layout.addWidget(self.ai_view)
 
@@ -478,9 +482,19 @@ class LogAnalysisPage(QWidget):
             item.setData(Qt.ItemDataRole.UserRole, (match.first_log_file_id, match.first_line))
             item.setToolTip("두 번 누르면 왼쪽 로그의 그 행으로 이동합니다.")
             self.reference_list.addItem(item)
-        if result.references:
-            self.reference_message.setText(f"로그에 나온 코드 {len(result.references)}개가 승인된 참고 자료에 있습니다. "
-                                           "설명·원인·조치는 참고 자료 글 그대로입니다.")
+        from app.reports.report_data import passage_line
+
+        for hit in result.passages:  # CR-07 REF-07: 일반 문서의 관련 문단
+            item = QListWidgetItem("[관련 문서 내용] " + passage_line(hit.as_dict()))
+            item.setData(Qt.ItemDataRole.UserRole, None)
+            self.reference_list.addItem(item)
+        if result.references or result.passages:
+            parts = []
+            if result.references:
+                parts.append(f"로그에 나온 코드 {len(result.references)}개가 승인된 참고 자료에 있습니다")
+            if result.passages:
+                parts.append(f"로그와 낱말이 겹치는 참고 문서 문단 {len(result.passages)}개를 찾았습니다")
+            self.reference_message.setText(". ".join(parts) + ". 내용은 참고 자료 글 그대로입니다.")
             fit_list_height(self.reference_list, minimum=60)
             # 내용만큼(줄바꿈이 한 줄 늘어도 잘리지 않게 한 줄 여유). 기본 크기(192px)로 빈 공간이 생기지 않게 한다.
             self.reference_list.setMaximumHeight(self.reference_list.minimumHeight()
@@ -495,9 +509,11 @@ class LogAnalysisPage(QWidget):
             self.reference_message.setText(
                 "로그에 나온 코드 중 승인된 참고 자료에 있는 것이 없습니다." if any_reference else
                 "승인된 참고 자료가 없습니다. 오류 코드 목록·설명 문서를 '관리 → 참고 자료 관리'에서 올리면 여기에 보입니다.")
-        self.reference_list.setVisible(bool(result.references))
+        self.reference_list.setVisible(bool(result.references or result.passages))
 
     def jump_to_reference(self, item: QListWidgetItem) -> bool:
+        if not item.data(Qt.ItemDataRole.UserRole):  # 관련 문서 문단은 로그 행이 없다
+            return False
         log_file_id, line = item.data(Qt.ItemDataRole.UserRole)
         return self.import_panel.show_line(log_file_id, line)
 
@@ -521,6 +537,7 @@ class LogAnalysisPage(QWidget):
     def show_ai(self, result: AnalysisResult) -> None:
         outcome = result.ai
         self.ai_view.clear()
+        self.ai_likelihood.hide()
         if outcome is None:
             self.ai_status.setText("AI 단계를 실행하지 않았습니다.")
             return
@@ -531,16 +548,30 @@ class LogAnalysisPage(QWidget):
                                    + "; ".join(outcome.errors)[:300])
             return
         answer = outcome.answer
-        self.ai_status.setText("AI 가설 — 사용자 검토 필요. 근거 키는 위 근거 표와 같습니다. 근거가 유효해도 해석이 옳다는 보장은 없습니다.")
+        self.ai_status.setText("AI 분석 의견 — 사용자 검토 필요. 가능성은 AI 추정치이며 통계 확률이 아닙니다. "
+                               "근거 키는 위 근거 표와 같습니다. 근거가 유효해도 해석이 옳다는 보장은 없습니다.")
         lines: list[str] = []
+        if answer.abnormal_likelihood is not None:  # CR-07 AO-01
+            self.ai_likelihood.setText(f"비정상일 가능성 {answer.abnormal_likelihood}%")
+            tone = "bad" if answer.abnormal_likelihood >= 70 else "warn" if answer.abnormal_likelihood >= 30 else "ok"
+            set_role(self.ai_likelihood, "cell-value", tone)
+            self.ai_likelihood.show()
+            lines.append(f"■ 비정상일 가능성 {answer.abnormal_likelihood}% (AI 추정치 · 통계 확률 아님)")
+            lines.append(f"  이유: {answer.likelihood_reason or '-'}  근거 [{', '.join(answer.likelihood_evidence)}]")
+        else:
+            lines.append("■ AI가 비정상일 가능성을 매기지 않았습니다.")
         if answer.observations:
             lines.append("■ 관측 사실")
             lines += [f"  · {o.text}  [{', '.join(o.evidence)}]" for o in answer.observations]
         if answer.hypotheses:
-            lines.append("■ 원인 가설")
+            lines.append("■ 원인 가설 (가능성은 AI 추정치)")
             for h in answer.hypotheses:
                 counter = f"  반대 근거 [{', '.join(h.counter_evidence)}]" if h.counter_evidence else ""
-                lines.append(f"  · {h.text}  근거 [{', '.join(h.evidence)}]{counter}")
+                chance = f"{h.likelihood:>3}%  " if h.likelihood is not None else "  —   "
+                lines.append(f"  · {chance}{h.text}  근거 [{', '.join(h.evidence)}]{counter}")
+            rated = [h.likelihood for h in answer.hypotheses if h.likelihood is not None]
+            if rated:
+                lines.append(f"  · {100 - sum(rated):>3}%  판단 불가(가설로 설명하지 못한 나머지)")
         if answer.response_plan:
             lines.append("■ AI가 정리한 대응 순서 (모두 승인된 매뉴얼·가이드 근거)")
             lines += [f"  {i}. {s.text}  [{', '.join(s.evidence)}]" for i, s in enumerate(answer.response_plan, start=1)]

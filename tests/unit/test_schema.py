@@ -202,13 +202,13 @@ def test_invalid_case_status_rejected(factory) -> None:
         factory.case(status="DONE")
 
 
-def test_abnormal_approval_requires_symptom_and_criteria(factory) -> None:  # AL-09
-    with pytest.raises(sqlite3.IntegrityError):
-        factory.case("ABNORMAL", status="APPROVED", approved_at=NOW, current_revision=1, symptom="증상만")
-    with pytest.raises(sqlite3.IntegrityError):
-        factory.case("ABNORMAL", status="APPROVED", approved_at=NOW, current_revision=1,
-                     symptom="  ", abnormal_criteria="기준")
+def test_abnormal_approval_without_criteria_is_allowed(factory, db) -> None:  # AL-09 → CR-07 LI-09 (0006)
+    factory.case("ABNORMAL", status="APPROVED", approved_at=NOW, current_revision=1)  # 판단 가이드는 선택
     factory.approved_case("ABNORMAL")
+    sql = db.execute("SELECT sql FROM sqlite_schema WHERE name = 'cases'").fetchone()[0]
+    assert "비정상 판정 기준이 필수" not in sql and "current_revision >= 1" in sql  # 그 CHECK만 빠졌다
+    with pytest.raises(sqlite3.IntegrityError):  # 다른 CHECK는 그대로
+        factory.case("ABNORMAL", status="APPROVED")
 
 
 def test_unconfirmed_cause_can_be_approved(factory) -> None:  # 원인 미확정 사례도 등록 가능
