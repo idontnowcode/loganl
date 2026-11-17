@@ -15,7 +15,7 @@ SAFE_OPEN = "‹‹‹"
 SAFE_CLOSE = "›››"
 
 # 근거 종류. KNOWLEDGE_KINDS는 '승인된 지식'으로 오류 코드 의미·조치의 근거가 될 수 있는 것.
-KNOWLEDGE_KINDS = frozenset({"GUIDE", "RESPONSE", "CLAIM"})
+KNOWLEDGE_KINDS = frozenset({"GUIDE", "RESPONSE", "CLAIM", "REFERENCE"})  # REFERENCE: 승인된 참고 자료(CR-04)
 OBSERVATION_KINDS = frozenset({"EVENT", "FEATURE", "FINDING"})
 
 

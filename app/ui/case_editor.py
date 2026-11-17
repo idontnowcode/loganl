@@ -1,5 +1,8 @@
 """정상·비정상 학습 화면의 공통 틀: 사례 고르기·저장·승인, 로그 입력, 운전 모드(AI 추정 + 사용자 확인), 메모.
 
+CR-05: 오른쪽 맨 위는 자유 글 칸 하나다. 'AI로 정리'가 내 글에서 칸을 채우고(learning.intake),
+칸 양식과 메모는 '칸으로 직접 고치기'에 접어 둔다.
+
 화면은 learning 계층 함수만 부른다. 긴 작업(AI 호출)은 TaskRunner로 돌린다.
 """
 
@@ -33,12 +36,16 @@ from app.ai.ollama_client import OllamaClient
 from app.bootstrap import AppContext
 from app.learning.approval_workflow import ApprovalError, ApprovalWorkflow
 from app.learning.case_manager import CaseDetail, CaseError, CaseManager, ModeManager
+from app.learning.intake import IntakeResult, IntakeService, title_from_story
 from app.learning.normal_learner import default_client_factory
 from app.models.enums import OriginPurpose
 from app.ui.log_import_panel import LogImportPanel
+from app.ui.natural_input import Collapsible, StatusLine, StoryBox, SummaryRow
 from app.ui.question_panel import QuestionPanel
 from app.ui.theme import STATUS_TONE, scroll_wrap, set_role
 from app.ui.workers import TaskRunner
+
+__all__ = ["CaseEditorBase", "StatusLine", "set_form_note", "text_box"]
 
 AUTOSAVE_MS = 1500
 STATUS_LABELS = {
@@ -60,31 +67,14 @@ def text_box(height: int = 54, placeholder: str = "") -> QPlainTextEdit:
     return box
 
 
-class StatusLine(QLabel):
-    """동작 결과 안내 줄. 화면 위쪽 고정 위치에 보이고, 비어 있으면 자리를 차지하지 않는다.
-    (예전에는 오른쪽 패널 맨 아래에 있어 '패턴 후보 만들기' 실패 안내가 보이지 않았다.)"""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.setWordWrap(True)
-        self.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        set_role(self, "hint")
-        self.hide()
-
-    def setText(self, text: str) -> None:  # noqa: N802 (Qt 이름 그대로)
-        super().setText(text)
-        self.setVisible(bool(text))
-
-    def clear(self) -> None:
-        self.setText("")
-
-
 class CaseEditorBase(QWidget):
     case_saved = Signal(int)
 
     case_type = "NORMAL"
     purpose = OriginPurpose.NORMAL_CASE
     steps_text = ""
+    story_placeholder = ""
+    mode_required = False  # 정상 학습만 승인 필수(패턴이 모드에 종속)
 
     def __init__(self, context: AppContext, client_factory: Callable[[], OllamaClient] | None = None,
                  parent: QWidget | None = None) -> None:
@@ -149,6 +139,7 @@ class CaseEditorBase(QWidget):
         self.fw_edit = QLineEdit()
         self.device_edit = QLineEdit()
 
+        self.title_edit.setPlaceholderText("비우면 글 첫 줄로 붙임")
         self.form = QFormLayout()
         self.form.addRow("제목", self.title_edit)
         self.form.addRow("운전 모드", mode_holder)
@@ -159,6 +150,17 @@ class CaseEditorBase(QWidget):
         self.form.addRow("장비 구성", self.device_edit)
         basics = QGroupBox("사례 정보")
         basics.setLayout(self.form)
+
+        # 자유 글 (CR-05)
+        self.story = StoryBox(
+            "이 로그에 대해 편하게 적어 주세요", self.story_placeholder,
+            "칸을 다 채울 필요 없습니다. 'AI로 정리'를 누르면 내 글에서 필요한 부분만 칸에 옮기고, "
+            "승인에 꼭 필요한데 빠진 것만 아래에서 묻습니다. AI는 새 내용을 지어내지 않습니다.")
+        self.story_edit = self.story.edit
+        self.story.organize_button.clicked.connect(self.organize_story)
+        self.mode_ok_button = QPushButton("이 모드가 맞음")
+        self.mode_ok_button.clicked.connect(self.confirm_mode)
+        self.mode_ok_button.hide()
 
         self.note_list = QListWidget()
         self.note_list.setFixedHeight(80)
@@ -194,10 +196,16 @@ class CaseEditorBase(QWidget):
 
         self.side = QVBoxLayout()
         self.side.addWidget(self.steps_label)
-        self.side.addWidget(basics)
+        self.side.addWidget(self.story)
         self.side.addWidget(self.question_panel)
-        self.side.addWidget(notes)
         self.build_specific(self.side)
+        manual = QWidget()
+        manual_layout = QVBoxLayout(manual)
+        manual_layout.setContentsMargins(0, 0, 0, 0)
+        manual_layout.addWidget(basics)
+        manual_layout.addWidget(notes)
+        self.fields_section = Collapsible("칸으로 직접 고치기 (제목·운전 모드·조건·FW·장비 구성·메모 등)", manual)
+        self.side.addWidget(self.fields_section)
         self.side.addWidget(QLabel("승인 검사"))
         self.side.addWidget(self.check_label)
         self.side.addStretch(1)
@@ -228,8 +236,8 @@ class CaseEditorBase(QWidget):
         self._autosave_timer.setSingleShot(True)
         self._autosave_timer.setInterval(AUTOSAVE_MS)
         self._autosave_timer.timeout.connect(self.autosave)
-        self.watch_changes(self.title_edit, self.conditions_edit, self.fw_edit, self.device_edit, self.mode_combo,
-                           self.mode_confirm, *self.specific_widgets())
+        self.watch_changes(self.story_edit, self.title_edit, self.conditions_edit, self.fw_edit, self.device_edit,
+                           self.mode_combo, self.mode_confirm, *self.specific_widgets())
         self.import_panel.files_changed.connect(lambda _ids: self.mark_dirty())
 
         self.refresh_modes()
@@ -271,7 +279,7 @@ class CaseEditorBase(QWidget):
         ids = self.import_panel.log_file_ids()
         try:
             if self.case_id is None:
-                if not self.title_edit.text().strip() and not ids:
+                if not self.title_edit.text().strip() and not ids and not self.story.text():
                     return False
                 title = fields.pop("title")
                 self.case_id = self.cases.create(self.case_type, title, ids, **fields)
@@ -289,6 +297,7 @@ class CaseEditorBase(QWidget):
         case = self.detail.case
         self.status_label.setText(f"{STATUS_LABELS.get(case.status, case.status)} · 개정본 {case.current_revision}"
                                   f" · 자동 저장 {datetime.now().strftime('%H:%M:%S')}")
+        self.refresh_summary()
         return True
 
     # ── 하위 클래스가 채우는 부분 ──
@@ -306,6 +315,67 @@ class CaseEditorBase(QWidget):
 
     def restore_decisions(self, decisions: dict[str, dict[int, str]]) -> None:
         """다시 불러온 뒤 사용자가 골라 둔(아직 승인 전) 결정을 되살린다."""
+
+    def specific_summary_rows(self) -> list[SummaryRow]:
+        """정리된 내용에 더할 화면별 줄(승인 필수 칸 등)."""
+        return []
+
+    # ── 자유 글 (CR-05) ──
+    def summary_rows(self) -> list[SummaryRow]:
+        mode_id = self.mode_combo.currentData()
+        mode_name = self.mode_combo.currentText() if mode_id is not None else None
+        pending = mode_name is not None and not self.mode_confirm.isChecked()
+        rows = [SummaryRow("운전 모드", mode_name, required=self.mode_required,
+                           pending="확인 전" if pending else None, action=self.mode_ok_button if pending else None)]
+        rows += [SummaryRow("운전 조건", self.conditions_edit.toPlainText().strip() or None),
+                 SummaryRow("FW 버전", self.fw_edit.text().strip() or None),
+                 SummaryRow("장비 구성", self.device_edit.text().strip() or None)]
+        return rows + self.specific_summary_rows()
+
+    def refresh_summary(self) -> None:
+        self.story.set_summary(self.summary_rows())
+
+    def organize_story(self) -> None:
+        text = self.story.text()
+        if not text:
+            self.story.result_label.setText("먼저 위 칸에 상황을 편하게 적어 주세요.")
+            return
+        if self.runner.busy:
+            return
+        pending = self.approval_decisions()
+        if self.save() is None:
+            return
+        self.restore_decisions(pending)
+        service = IntakeService(self.context.database, self.context.settings, self._client_factory())
+        self.story.organize_button.setEnabled(False)
+        self.story.result_label.setText("AI가 내 글에서 칸에 맞는 부분을 찾는 중…")
+        self.runner.start(service.organize_case, self.case_id, text, on_done=self._on_organized,
+                          on_error=self._on_organize_error)
+
+    def _on_organized(self, result: IntakeResult) -> None:
+        pending = self.approval_decisions()
+        self.story.organize_button.setEnabled(True)
+        self.refresh_cases()
+        self.load_case(self.case_id)
+        self.restore_decisions(pending)
+        self.story.result_label.setText(result.message())
+        if result.status == "RULES_ONLY":
+            self.fields_section.set_expanded(True)
+
+    def _on_organize_error(self, message: str) -> None:
+        self.story.organize_button.setEnabled(True)
+        self.story.result_label.setText(f"정리하지 못했습니다: {message} 글은 저장됐습니다. "
+                                        "'칸으로 직접 고치기'에서 빠진 칸을 채우세요.")
+        self.fields_section.set_expanded(True)
+
+    def confirm_mode(self) -> None:
+        if self.mode_combo.currentData() is None:
+            return
+        self.mode_confirm.setChecked(True)
+        pending = self.approval_decisions()
+        if self.save() is not None:
+            self.restore_decisions(pending)
+            self.message_label.setText(f"운전 모드를 '{self.mode_combo.currentText()}'(으)로 확인했습니다.")
 
     # ── 목록 ──
     def refresh_modes(self) -> None:
@@ -342,9 +412,12 @@ class CaseEditorBase(QWidget):
             self._autosave_timer.stop()
 
     def _load_case(self, case_id: int | None) -> None:
+        if case_id != self.case_id or case_id is None:
+            self.story.result_label.clear()  # 다른 사례의 정리 안내를 남기지 않는다
         self.case_id = case_id
         self.detail = self.cases.detail(case_id) if case_id else None
         case = self.detail.case if self.detail else None
+        self.story_edit.setPlainText(case.user_description or "" if case else "")
         self.title_edit.setText(case.title if case else "")
         self._select_data(self.mode_combo, case.mode_id if case else None)
         self.mode_confirm.setChecked(bool(case and case.mode_confirmed))
@@ -377,8 +450,10 @@ class CaseEditorBase(QWidget):
 
     def collect_fields(self) -> dict[str, Any]:
         mode_id = self.mode_combo.currentData()
+        story = self.story.text()
         fields = {
-            "title": self.title_edit.text().strip() or "제목 없는 사례",
+            "title": self.title_edit.text().strip() or title_from_story(story) or "제목 없는 사례",
+            "user_description": story or None,
             "mode_id": mode_id,
             "mode_confirmed": bool(mode_id is not None and self.mode_confirm.isChecked()),
             "operating_conditions": self.conditions_edit.toPlainText().strip() or None,
@@ -568,6 +643,9 @@ class CaseEditorBase(QWidget):
             lines = [f"막힘 · {b}" for b in check.blocking] + [f"참고 · {w}" for w in check.warnings]
             self.check_label.setText("\n".join(lines) if lines else "승인할 수 있습니다.")
             locked = case.status in ("APPROVED", "ARCHIVED")
+        self.story_edit.setReadOnly(locked)
+        self.story.organize_button.setEnabled(not locked)
+        self.refresh_summary()
         self.reopen_button.setEnabled(bool(case and case.status == "APPROVED"))
         self.approve_button.setEnabled(not locked and case is not None)
         self.review_button.setEnabled(not locked and case is not None)

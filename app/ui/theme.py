@@ -2,7 +2,7 @@
 
 화면 코드는 역할 속성만 단다:
   QPushButton[variant="primary"|"danger"], QLabel[role="stamp"][tone=…], QLabel[role="hint"|"warning"|"muted"|"title"],
-  QFrame[role="cell"] (표제란 칸).
+  QFrame[role="cell"] (표제란 칸), QToolButton[role="disclosure"] (접는 구역 제목 줄).
 """
 
 from __future__ import annotations
@@ -86,6 +86,11 @@ QPushButton[variant="primary"]:disabled {{ background: #9FB6D6; border-color: #9
 QPushButton[variant="danger"] {{ color: {t['bad']}; border: 1px solid {t['bad_line']}; background: {t['surface']}; }}
 QPushButton[variant="danger"]:hover {{ background: {t['bad_soft']}; }}
 QPushButton[variant="danger"]:disabled {{ color: #C9A6A3; border-color: {t['line']}; background: {t['sunken']}; }}
+/* 접는 구역 제목 줄 (CR-05) */
+QToolButton[role="disclosure"] {{ background: transparent; border: none; padding: 6px 4px; font-weight: 600;
+                                  color: {t['ink2']}; }}
+QToolButton[role="disclosure"]:hover {{ color: {t['ink']}; background: {t['neutral_soft']}; }}
+QToolButton[role="disclosure"]:checked {{ color: {t['ink']}; }}
 
 /* 입력 */
 QLineEdit, QPlainTextEdit, QTextEdit, QComboBox, QSpinBox, QDoubleSpinBox {{

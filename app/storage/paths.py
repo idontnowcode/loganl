@@ -3,7 +3,7 @@
 ```
 <root>/database/knowledge.db
 <root>/cases/normal, cases/abnormal
-<root>/attachments/guides
+<root>/attachments/guides, attachments/references (CR-04 참고 자료)
 <root>/indexes, analysis, backups, logs
 <bootstrap>/config/settings.json   ← 설정은 항상 부트스트랩 폴더 (REQUIREMENTS D-1)
 ```
@@ -42,6 +42,10 @@ class AppPaths:
         return self.root / "attachments" / "guides"
 
     @property
+    def references(self) -> Path:
+        return self.root / "attachments" / "references"
+
+    @property
     def indexes(self) -> Path:
         return self.root / "indexes"
 
@@ -63,6 +67,7 @@ class AppPaths:
             self.cases_normal,
             self.cases_abnormal,
             self.guides,
+            self.references,
             self.indexes,
             self.analysis,
             self.backups,

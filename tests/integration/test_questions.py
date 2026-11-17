@@ -46,15 +46,26 @@ def normal_case(ctx, tmp_path: Path):
     return CaseManager(ctx.database).create("NORMAL", "질문 시험", ids)
 
 
-def test_missing_required_info_creates_questions(ctx, normal_case) -> None:  # T-QE-01
+def test_missing_info_creates_questions(ctx, normal_case) -> None:  # T-QE-01, CR-06 LI-05
     engine = QuestionEngine(ctx.database)
     questions = engine.refresh(normal_case)
-    assert triggers(questions)[:2] == ["MODE_UNKNOWN", "NORMAL_RATIONALE_MISSING"]  # 필수·중요도 순
+    assert triggers(questions)[:2] == ["MODE_UNKNOWN", "NORMAL_RATIONALE_MISSING"]  # 중요도 순
     assert all(q.reason for q in questions)  # 질문 이유
-    assert CaseManager(ctx.database).get(normal_case).status == "NEEDS_INFORMATION"
-    check = ApprovalWorkflow(ctx.database).check(normal_case)
-    assert any("필수 확인 질문" in b for b in check.blocking)  # 필수 정보 미충족 시 승인 보류
+    assert not any(q.required for q in questions)  # CR-06: 정상 사례는 로그만 필수
+    assert CaseManager(ctx.database).get(normal_case).status == "DRAFT"
+    assert ApprovalWorkflow(ctx.database).check(normal_case).ok
     assert len(engine.next_questions(normal_case)) <= 3
+
+
+def test_required_question_blocks_approval(ctx, tmp_path: Path) -> None:  # QE-08: 필수 질문이 남으면 승인 보류
+    ids = import_paths(ctx, [abnormal_log(tmp_path / "r.log")], purpose=OriginPurpose.ABNORMAL_CASE)
+    case_id = CaseManager(ctx.database).create("ABNORMAL", "필수 질문", ids, symptom="증상", abnormal_criteria="기준 3회")
+    with closing(ctx.database.connect()) as conn:
+        QuestionRepository(conn).upsert(case_id, trigger_type="USER_LOG_CONFLICT", question_text="가상 필수 질문",
+                                        reason="시험", priority=99, is_required=True, dedup_key="test:required",
+                                        generated_by="RULE")
+    check = ApprovalWorkflow(ctx.database).check(case_id)
+    assert any("필수 확인 질문" in b for b in check.blocking)
 
 
 def test_answers_update_case_and_reanalyze(ctx, normal_case) -> None:  # T-QE-02·04
@@ -81,7 +92,7 @@ def test_unknown_answer_is_kept_and_not_repeated(ctx, normal_case) -> None:  # T
         rows = QuestionRepository(conn).for_case(normal_case)
     same = [r for r in rows if r["dedup_key"] == "normal_rationale"]
     assert len(same) == 1 and same[0]["status"] == "UNKNOWN"  # 같은 질문을 다시 만들지 않는다
-    assert any("정상 판정 근거" in b for b in ApprovalWorkflow(ctx.database).check(normal_case).blocking)
+    assert ApprovalWorkflow(ctx.database).check(normal_case).ok  # CR-06: '모름'이어도 정상 사례는 승인 가능
 
 
 def test_session_question_and_merge(ctx, tmp_path: Path) -> None:
@@ -116,7 +127,7 @@ def test_abnormal_questions(ctx, tmp_path: Path) -> None:
                                                abnormal_criteria="TEST-FAULT가 자주 나오면", symptom="TEST-E999 발생")
     engine = QuestionEngine(ctx.database)
     found = {q.trigger: q for q in engine.refresh(case_id)}
-    assert found["GUIDE_INFO_MISSING"].required and found["CAUSE_STATUS_UNKNOWN"].required
+    assert not found["GUIDE_INFO_MISSING"].required and not found["CAUSE_STATUS_UNKNOWN"].required  # CR-06: 선택
     assert not found["MODE_UNKNOWN"].required  # 비정상 사례에서 모드는 필수 아님
     assert "CRITERIA_DETAIL_UNKNOWN" in found  # 판정 기준에 숫자가 없다
     assert "TEST-E999" in found["USER_LOG_CONFLICT"].text  # 설명의 코드가 로그에 없다

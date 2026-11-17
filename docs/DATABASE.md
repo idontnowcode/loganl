@@ -233,6 +233,19 @@ audit_history (모든 엔터티의 승인·수정·삭제 기록, 추가 전용)
 | 0003_search_index | FTS5 `events_fts`(message·event_type·error_code, 외부 내용) + 삽입·삭제·수정 트리거 | §6.3 텍스트 검색, §9.1 색인 재생성(`INSERT INTO events_fts(events_fts) VALUES('rebuild')`) |
 | 0004_fts_bulk_index | 삽입 트리거 제거 | 행마다 트리거면 10MB × 10개 가져오기가 32초에서 145초로 느려졌다. `EventRepository.add_many`가 파일 단위로 한 번에 색인한다(36.9초). |
 
+| 0005_reference_library | `reference_documents`·`reference_entries`, 승인 뷰 `approved_reference_entries`, 트리거 | CR-04 참고 자료(사용자 코드 사전) |
+
+### 0005 참고 자료 (CR-04)
+
+- `reference_documents`: 올린 문서 하나. `format` ∈ TXT·MD·XLSX·PDF·DOCX, `status` ∈ DRAFT·APPROVED·ARCHIVED, `sha256` 유일, `replaces_id`(같은 제목의 이전 승인 버전), `column_map_json`(표 열 역할을 사용자가 고른 값).
+- `reference_entries`: 코드 항목 하나. `code`(원문 그대로), `code_norm`(공백 제거·대문자, 찾기용 색인), `title`·`description`·`cause`·`action`, `locator`(원문 위치), `source_text`(원문 행·문단), `source_kind` ∈ EXTRACTED·USER, `status` ∈ INCLUDED·EXCLUDED.
+- 트리거
+  - 문서 식별 정보(원래 이름·사본 경로·해시·크기·형식)는 바꿀 수 없다.
+  - 상태는 DRAFT → APPROVED/ARCHIVED, APPROVED → ARCHIVED만 된다. 보관은 마지막 상태다.
+  - 승인·보관된 문서는 지울 수 없고, 그 항목은 넣기·고치기·지우기가 막힌다.
+- 분석은 `approved_reference_entries`(승인 문서 + INCLUDED 항목)로만 읽는다.
+- 분석 결과의 참고 자료 일치는 `analysis_evidence.finding_type = 'TEXT_MATCH'`(이미 있던 값)에 `detail_json.role = 'REFERENCE_MATCH'`로 저장한다. 종류 제약을 바꾸려면 테이블을 다시 만들어야 해서 AI 대응 순서와 같은 방식을 쓴다.
+
 ### 결정·관례 (Phase 3~7)
 
 - **승인 사례 수정 중**(수정 시작 → DRAFT)에는 승인 뷰에서 빠진다. 다시 승인하면 개정본이 하나 늘고 이전 개정본은 보존된다(§5 미결 항목을 결정함).

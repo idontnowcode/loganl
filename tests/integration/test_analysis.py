@@ -129,10 +129,23 @@ def test_no_knowledge_is_not_evaluated(ctx, tmp_path: Path) -> None:  # T-NA-05
                            "response_guidance": "NONE"}
 
 
-def test_unknown_mode_is_partial(ctx, knowledge, tmp_path: Path) -> None:
+def test_without_mode_compares_with_most_similar_normal(ctx, knowledge, tmp_path: Path) -> None:  # CR-06 LI-06
     ids = load(ctx, [normal_log(tmp_path / "new.log", start_second=40)], OriginPurpose.ANALYSIS)
     result = run(ctx, ids, None, False)
+    assert result.axes["normal_match"] == "MATCH" and result.axes["evidence_sufficiency"] == "SUFFICIENT"
+    assert any("가장 비슷한 정상 로그 C-0001 승인 정상(점수" in n for n in result.notes)
+    extra = write(tmp_path / "extra.log", iso_lines(NORMAL_SEQUENCE + [("INFO", "TEST-CTRL", "TEST-NEWTHING x=1")],
+                                                    start_second=80))
+    with_extra = run(ctx, load(ctx, [extra], OriginPurpose.ANALYSIS), None, False)
+    assert any(f.finding_type == "EXTRA_EVENT" for f in with_extra.findings)  # 비슷한 정상 로그에 없던 이벤트
+    assert with_extra.axes["anomaly_level"] != "RULE_VIOLATION"  # 모드 없이는 확정 패턴을 쓰지 않는다
+
+
+def test_without_mode_and_no_similar_normal_is_partial(ctx, knowledge, tmp_path: Path) -> None:
+    other = write(tmp_path / "other.log", iso_lines([("INFO", "TEST-OTHER", f"TEST-ALIEN{i} v=1") for i in range(4)]))
+    result = run(ctx, load(ctx, [other], OriginPurpose.ANALYSIS), None, False)
     assert result.axes["evidence_sufficiency"] == "PARTIAL"
+    assert any("비슷한 정상 로그가 없어" in n for n in result.notes)
 
 
 def test_draft_cases_are_excluded(ctx, tmp_path: Path) -> None:  # DB-04, T-DONE-03

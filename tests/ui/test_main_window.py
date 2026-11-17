@@ -39,35 +39,45 @@ def make_window(qtbot, context, checker=reachable) -> MainWindow:
     return window
 
 
-def test_three_main_tabs_in_plan_order(qtbot, context) -> None:
+def test_two_main_tabs(qtbot, context) -> None:  # CR-06 LI-01
     window = make_window(qtbot, context)
     titles = [window.tabs.tabText(i) for i in range(window.tabs.count())]
-    assert titles == ["정상 로그 학습", "비정상 로그 학습", "신규 로그 분석"]
+    assert titles == ["로그 입력", "신규 로그 분석"]
 
 
 def test_tabs_hold_real_pages(qtbot, context) -> None:
     from PySide6.QtWidgets import QLabel, QPushButton
 
-    from app.ui.abnormal_learning import AbnormalLearningPage
-    from app.ui.normal_learning import NormalLearningPage
+    from app.ui.log_entry import LogEntryPage
 
     window = make_window(qtbot, context)
-    assert isinstance(window.tabs.widget(0), NormalLearningPage)
-    assert isinstance(window.tabs.widget(1), AbnormalLearningPage)
-    buttons = [b.text() for b in window.tabs.widget(1).findChildren(QPushButton)]
-    assert "대응 매뉴얼 첨부…" in buttons  # CR-01
+    assert isinstance(window.tabs.widget(0), LogEntryPage)
     from app.ui.log_analysis import LogAnalysisPage
 
-    analysis = window.tabs.widget(2)
+    analysis = window.tabs.widget(1)
     assert isinstance(analysis, LogAnalysisPage)
     assert analysis.guidance_box.title().startswith("권장 대응")  # CR-01, UI-16: 결과 맨 위 권장 대응
-    assert QLabel  # noqa: B018 (import 유지)
+    assert QLabel and QPushButton  # noqa: B018 (import 유지)
+
+
+def test_detail_editor_opens_old_learning_page(qtbot, context) -> None:  # CR-06 LI-07
+    from PySide6.QtWidgets import QPushButton
+
+    from app.learning.case_manager import CaseManager
+    from app.ui.abnormal_learning import AbnormalLearningPage
+
+    window = make_window(qtbot, context)
+    case_id = CaseManager(context.database).create("ABNORMAL", "자세히 편집 시험", [])
+    dialog = window.open_case("ABNORMAL", case_id)
+    assert isinstance(dialog.page, AbnormalLearningPage) and dialog.page.case_id == case_id
+    assert "대응 매뉴얼 첨부…" in [b.text() for b in dialog.page.findChildren(QPushButton)]  # CR-01 기능은 그대로
+    dialog.reject()
 
 
 def test_aux_menu_has_five_items_and_only_settings_enabled(qtbot, context) -> None:
     window = make_window(qtbot, context)
     names = [name for name, _ in AUX_MENU]
-    assert names == ["학습 사례 관리", "분석 이력", "운전 모드 관리", "설정", "백업 및 복원"]
+    assert names == ["학습 사례 관리", "분석 이력", "참고 자료 관리", "운전 모드 관리", "설정", "백업 및 복원"]  # CR-04
     for name, phase in AUX_MENU:
         action = window.menu_actions[name]
         assert action.text().startswith(name)
@@ -77,7 +87,7 @@ def test_aux_menu_has_five_items_and_only_settings_enabled(qtbot, context) -> No
 def test_status_bar_shows_db_and_data_folder(qtbot, context) -> None:
     window = make_window(qtbot, context)
     assert str(context.paths.root) in window.data_label.text()
-    assert "스키마 v4" in window.db_label.text()
+    assert "스키마 v5" in window.db_label.text()
 
 
 def test_ollama_status_connected(qtbot, context) -> None:

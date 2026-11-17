@@ -44,7 +44,20 @@ def render_html(data: dict[str, Any]) -> str:
         parts.append("<p>등록된 대응 방법이 없습니다.</p>")
     for check in guidance["checks"]:
         parts.append(f"<p>원인 확인: {_e(check['text'])} <span class='key'>{_e(check['key'])}</span></p>")
-    parts.append("</div><h2>결과 분류 (서로 독립)</h2><table>")
+    parts.append("</div>")
+    if data.get("references"):
+        parts.append("<h2>참고 자료 — 로그에 나온 코드 (승인된 참고 자료, 권장 대응과 별개)</h2><table>"
+                     "<tr><th>코드</th><th>횟수·처음 위치</th><th>명칭</th><th>설명</th><th>원인</th><th>조치</th><th>출처</th></tr>")
+        for ref in data["references"]:
+            for index, entry in enumerate(ref["entries"]):
+                head = (f"<td class='key'>{_e(ref['code'])}</td><td>{_e(ref['count'])}회 · {_e(ref['file'])} {_e(ref['line'])}행</td>"
+                        if index == 0 else "<td></td><td></td>")
+                source = entry["document_title"] + (f" · {entry['locator']}" if entry.get("locator") else "")
+                parts.append(f"<tr>{head}" + "".join(f"<td>{_e(entry.get(name) or '')}</td>"
+                                                       for name in ("title", "description", "cause", "action"))
+                             + f"<td>{_e(source)}</td></tr>")
+        parts.append("</table>")
+    parts.append("<h2>결과 분류 (서로 독립)</h2><table>")
     parts += [f"<tr><th>{_e(a['title'])}</th><td>{_e(a['text'])}</td></tr>" for a in data["axes"].values()]
     parts.append("</table><h2>입력 로그</h2><table><tr><th>파일</th><th>세션</th><th>시각 기준</th><th>SHA-256</th></tr>")
     parts += [f"<tr><td>{_e(f['name'])}</td><td>{_e(f['session'])}</td><td>{_e(f['timestamp_basis'])}</td>"

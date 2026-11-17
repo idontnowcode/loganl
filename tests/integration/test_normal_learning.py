@@ -63,19 +63,18 @@ def test_patterns_need_mode(setup, ctx) -> None:
         NormalLearner(ctx.database, ctx.settings).propose(case_id)
 
 
-def test_approval_blocks_until_required_info(setup, ctx) -> None:
+def test_normal_needs_only_logs(setup, ctx, tmp_path) -> None:  # CR-06 LI-05
     mode_id, case_id, cases = setup
     workflow = ApprovalWorkflow(ctx.database)
     check = workflow.check(case_id)
-    assert any("운전 모드" in b for b in check.blocking) and any("정상 판정 근거" in b for b in check.blocking)
-    with pytest.raises(ApprovalError):
-        workflow.approve(case_id)
-    assert workflow.request_review(case_id).blocking
-    assert cases.get(case_id).status == "NEEDS_INFORMATION"
-    cases.set_mode(case_id, mode_id, True)
-    cases.update(case_id, normal_rationale="정상")
+    assert check.ok  # 운전 모드·정상 판정 근거는 선택
+    assert any("운전 모드가 없습니다" in w for w in check.warnings)
     assert workflow.request_review(case_id).ok
     assert cases.get(case_id).status == "READY_FOR_REVIEW"
+    empty = cases.create("NORMAL", "로그 없음", [])
+    assert any("로그 파일" in b for b in workflow.check(empty).blocking)
+    with pytest.raises(ApprovalError):
+        workflow.approve(empty)
 
 
 def approve_with_patterns(ctx, case_id: int, mode_id: int, cases: CaseManager) -> list:

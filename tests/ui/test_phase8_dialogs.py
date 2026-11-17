@@ -46,12 +46,16 @@ def test_report_and_register_case_from_analysis(qtbot, ctx, knowledge, tmp_path:
     page = window.analysis_page
     rel_json, rel_html = page.save_report()
     assert (ctx.paths.root / rel_html).exists() and "보고서를 저장" in page.report_label.text()
-    page.request_case("ABNORMAL")
-    assert window.tabs.currentWidget() is window.abnormal_page
-    case = window.abnormal_page.detail.case
-    # 새 비정상 초안은 진단 가이드·원인 확정 여부가 없어 질문 엔진이 '정보 필요'로 표시한다
-    assert case.status == "NEEDS_INFORMATION" and case.title.startswith(f"R-{page.result.run_id:04d}")
-    assert window.abnormal_page.import_panel.log_file_ids() == page.import_panel.log_file_ids()
+    page.request_case("ABNORMAL")  # CR-06 LI-08: 로그 입력 탭에 올리고 '비정상'을 미리 골라 둔다
+    entry = window.entry_page
+    assert window.tabs.currentWidget() is entry
+    ids = page.import_panel.log_file_ids()
+    assert entry.import_panel.log_file_ids() == ids and entry.selected_ids() == ids
+    assert entry.abnormal_radio.isChecked() and entry.criteria_edit.isVisibleTo(entry)
+    entry.criteria_edit.setPlainText("가상: TEST-E001이 반복돼 에러로 봄")
+    assert entry.save_selected()
+    case = CaseManager(ctx.database).get(entry.service.entry(ids[0]).case_id)
+    assert case.case_type == "ABNORMAL" and case.status == "APPROVED"
 
 
 def test_history_dialog_reopens_and_saves(qtbot, ctx, knowledge, tmp_path: Path) -> None:  # noqa: F811

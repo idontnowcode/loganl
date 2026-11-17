@@ -62,25 +62,21 @@ class ApprovalWorkflow:
         result = ApprovalCheck()
         if not CaseRepository(conn).log_file_ids(case_id):
             result.blocking.append("로그 파일이 하나도 없습니다.")
+        # CR-06 LI-05: 정상은 로그만, 비정상은 로그 + 증상·판정 기준(DB 제약). 나머지는 선택이고 경고만 한다.
         if case.case_type == "NORMAL":
             if case.mode_id is None or not case.mode_confirmed:
-                result.blocking.append("운전 모드를 정하고 '확인'을 표시해야 합니다(정상 패턴은 모드에 종속).")
-            if _blank(case.normal_rationale):
-                result.blocking.append("정상 판정 근거를 입력해야 합니다.")
+                result.warnings.append("운전 모드가 없습니다(선택). 분석할 때 가장 비슷한 정상 로그와 비교하고, "
+                                       "패턴은 확정할 수 없습니다.")
         else:
             guides = GuideRepository(conn)
-            if not guides.attachments(case_id, "DIAGNOSTIC_GUIDE"):
-                result.blocking.append("진단 가이드(TXT/MD) 첨부가 필수입니다.")
             if _blank(case.symptom):
                 result.blocking.append("오류 증상을 입력해야 합니다.")
             if _blank(case.abnormal_criteria):
-                result.blocking.append("비정상 판정 기준을 입력해야 합니다.")
+                result.blocking.append("비정상 판정 기준(에러로 판단한 근거)을 입력해야 합니다.")
             if case.cause_status is None:
-                result.blocking.append("원인 확정 여부(확정·추정·모름)를 골라야 합니다.")
-            if case.mode_id is None or not case.mode_confirmed:
-                result.warnings.append("운전 모드가 확인되지 않았습니다. 모드별 비교에서 빠질 수 있습니다.")
-            if not guides.attachments(case_id, "RESPONSE_MANUAL"):
-                result.warnings.append("대응 매뉴얼이 없습니다(선택). 신규 분석의 권장 대응은 가이드의 해결 방법만 씁니다.")
+                result.warnings.append("원인 확정 여부를 적지 않았습니다(선택). AI 진단은 원인을 가설로만 씁니다.")
+            if not guides.attachments(case_id, "DIAGNOSTIC_GUIDE") and not guides.attachments(case_id, "RESPONSE_MANUAL"):
+                result.warnings.append("진단 가이드·대응 매뉴얼이 없습니다(선택). 오류 코드 뜻은 참고 자료에서 찾습니다.")
         open_required = QuestionRepository(conn).open_required_count(case_id)
         if open_required:
             result.blocking.append(f"답하지 않은 필수 확인 질문이 {open_required}개 있습니다.")

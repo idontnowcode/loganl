@@ -35,8 +35,8 @@ def test_panel_shows_top_three_and_applies_answers(qtbot, ctx, tmp_path: Path) -
     page.save()
     panel = page.question_panel
     assert len(panel.rows) == 3  # 질문은 더 많아도 3개만
-    assert "필수 2개" in panel.summary.text()
-    assert page.status_label.text().startswith("정보 필요")
+    assert "필수 0개" in panel.summary.text()  # CR-06: 모드·정상 근거 질문은 선택
+    assert page.status_label.text().startswith("초안")
 
     mode_row = next(r for r in panel.rows if r.question.trigger == "MODE_UNKNOWN")
     mode_row.choice.setCurrentIndex(mode_row.choice.findData(str(mode_id)))

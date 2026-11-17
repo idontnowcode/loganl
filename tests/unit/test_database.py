@@ -25,8 +25,8 @@ def _copy_migrations(tmp_path: Path) -> Path:
 def test_migrate_applies_initial_schema(tmp_path: Path) -> None:
     database = Database(tmp_path / "k.db")
     assert database.schema_version() == 0
-    assert database.migrate() == [1, 2, 3, 4]
-    assert database.schema_version() == 4
+    assert database.migrate() == [1, 2, 3, 4, 5]
+    assert database.schema_version() == 5
 
 
 def test_migrate_twice_is_noop(tmp_path: Path) -> None:
@@ -35,7 +35,8 @@ def test_migrate_twice_is_noop(tmp_path: Path) -> None:
     assert database.migrate() == []
     with closing(database.connect()) as conn:
         rows = conn.execute("SELECT version, name, length(checksum) AS n FROM schema_migrations").fetchall()
-    assert [(r["version"], r["name"], r["n"]) for r in rows] == [(1, "initial_schema", 64), (2, "session_relation", 64), (3, "search_index", 64), (4, "fts_bulk_index", 64)]
+    assert [(r["version"], r["name"], r["n"]) for r in rows] == [(1, "initial_schema", 64), (2, "session_relation", 64), (3, "search_index", 64), (4, "fts_bulk_index", 64),
+                                                                (5, "reference_library", 64)]
 
 
 def test_changed_applied_migration_is_rejected(tmp_path: Path) -> None:
@@ -78,7 +79,7 @@ def test_failed_migration_rolls_back(tmp_path: Path) -> None:
     database = Database(tmp_path / "k.db", migrations)
     with pytest.raises(MigrationError, match="0099_broken"):
         database.migrate()
-    assert database.schema_version() == 4  # 0001~0004는 적용, 0099는 전부 되돌림
+    assert database.schema_version() == 5  # 0001~0005는 적용, 0099는 전부 되돌림
     with closing(database.connect()) as conn:
         exists = conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'half_done'").fetchone()
     assert exists is None

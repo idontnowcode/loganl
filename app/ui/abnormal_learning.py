@@ -32,6 +32,7 @@ from app.learning.case_manager import CaseDetail, CaseError
 from app.models.enums import OriginPurpose
 from app.storage.repositories import GuideRepository
 from app.ui.case_editor import CaseEditorBase, text_box
+from app.ui.natural_input import SummaryRow
 from app.ui.theme import comfortable_table, fit_widget_column
 
 SECTION_LABELS = {
@@ -48,20 +49,30 @@ DECISIONS = (("PROPOSED", "보류"), ("APPROVED", "승인"), ("REJECTED", "거�
 class AbnormalLearningPage(CaseEditorBase):
     case_type = "ABNORMAL"
     purpose = OriginPurpose.ABNORMAL_CASE
-    steps_text = ("진행 순서  ① 왼쪽에 비정상 로그를 넣고 가져오기 → ② 아래에서 진단 가이드(필수)·대응 매뉴얼(선택) 첨부 → "
-                  "③ 오류 증상·판정 기준·원인 확정 여부 → ④ 항목마다 승인·거부, AI 확인 질문에 답하기 → ⑤ '승인'.")
+    steps_text = ("진행 순서  ① 왼쪽에 비정상 로그를 넣고 가져오기 → ② 아래 칸에 무슨 일이 있었는지 편하게 적고 'AI로 정리' → "
+                  "③ 진단 가이드(필수)·대응 매뉴얼(선택) 첨부 → ④ 빠진 것만 질문에 답하기 → ⑤ '승인'. 입력은 자동 저장됩니다.")
+    story_placeholder = ("예) ○○ 모드로 돌리던 중 TEST-E001이 뜨고 멈춤. 이 코드가 세 번 넘게 나오면 비정상으로 봄. "
+                         "원인은 아직 모름.")
+
+    def specific_summary_rows(self) -> list[SummaryRow]:
+        cause = self.cause_combo.currentData()
+        return [
+            SummaryRow("진단 가이드", f"첨부 {self._guide_count}개" if self._guide_count else None, required=True),
+            SummaryRow("오류 증상", self.symptom_edit.toPlainText().strip() or None, required=True),
+            SummaryRow("판정 기준", self.criteria_edit.toPlainText().strip() or None, required=True),
+            SummaryRow("원인 확정 여부", self.cause_combo.currentText() if cause else None, required=True),
+        ]
 
     def build_specific(self, layout: QVBoxLayout) -> None:
+        self._guide_count = 0
         self.symptom_edit = text_box(54, "오류 증상 (승인 필수)")
         self.criteria_edit = text_box(54, "비정상 판정 기준 (승인 필수)")
         self.cause_combo = QComboBox()
         for value, label in CAUSE_CHOICES:
             self.cause_combo.addItem(label, value)
-        self.description_edit = text_box(46, "사용자 추가 설명 (선택)")
         self.form.addRow("오류 증상", self.symptom_edit)
         self.form.addRow("판정 기준", self.criteria_edit)
         self.form.addRow("원인 확정 여부", self.cause_combo)
-        self.form.addRow("추가 설명", self.description_edit)
 
         box = QGroupBox("진단 가이드(필수) · 대응 매뉴얼(선택)")
         inner = QVBoxLayout(box)
@@ -120,18 +131,16 @@ class AbnormalLearningPage(CaseEditorBase):
             "symptom": self.symptom_edit.toPlainText().strip() or None,
             "abnormal_criteria": self.criteria_edit.toPlainText().strip() or None,
             "cause_status": self.cause_combo.currentData(),
-            "user_description": self.description_edit.toPlainText().strip() or None,
         }
 
     def specific_widgets(self) -> list:
-        return [self.symptom_edit, self.criteria_edit, self.cause_combo, self.description_edit]
+        return [self.symptom_edit, self.criteria_edit, self.cause_combo]
 
     def fill_specific(self, detail: CaseDetail | None) -> None:
         case = detail.case if detail else None
         self.symptom_edit.setPlainText(case.symptom or "" if case else "")
         self.criteria_edit.setPlainText(case.abnormal_criteria or "" if case else "")
         self._select_data(self.cause_combo, case.cause_status if case else None)
-        self.description_edit.setPlainText(case.user_description or "" if case else "")
         self.attachment_list.clear()
         self.preview.clear()
         rows, items = [], []
@@ -141,6 +150,7 @@ class AbnormalLearningPage(CaseEditorBase):
             with closing(self.context.database.connect()) as conn:
                 rows = GuideRepository(conn).attachments(case.id)
                 items = GuideRepository(conn).items(case.id)
+        self._guide_count = sum(1 for row in rows if row["attachment_kind"] == "DIAGNOSTIC_GUIDE")
         for row in rows:
             entry = QListWidgetItem(f"[{KIND_SHORT[row['attachment_kind']]}] {row['original_name']}")
             entry.setData(Qt.ItemDataRole.UserRole, row["id"])
@@ -150,7 +160,10 @@ class AbnormalLearningPage(CaseEditorBase):
             combo = QComboBox()
             for value, label in DECISIONS:
                 combo.addItem(label, value)
-            combo.setCurrentIndex(max(combo.findData(item["status"]), 0))
+            shown = item["status"]
+            if shown == "PROPOSED" and item["source_kind"] == "GUIDE_TEXT":
+                shown = "APPROVED"  # CR-05 NL-07: 원문 그대로 나눈 항목은 '승인'을 기본으로(사례 승인은 사용자가 누름)
+            combo.setCurrentIndex(max(combo.findData(shown), 0))
             combo.setProperty("item_id", item["id"])
             self.item_table.setCellWidget(r, 0, combo)
             fit_widget_column(self.item_table)
@@ -219,7 +232,8 @@ class AbnormalLearningPage(CaseEditorBase):
         if outcome.duplicate:
             message = f"이미 첨부된 {label}입니다."
         elif outcome.headings_found:
-            message = f"{label}를 첨부하고 항목 {outcome.items}개로 나눴습니다. 항목마다 승인·거부를 고르세요."
+            message = (f"{label}를 첨부하고 항목 {outcome.items}개로 나눴습니다. 원문 그대로 나눈 항목은 '승인'으로 "
+                       "두었습니다. 빼고 싶은 항목만 '거부'로 바꾸세요.")
         else:
             message = f"{label}에서 항목 제목을 찾지 못해 전체를 '참고'로 두었습니다. AI 분류나 직접 정리가 필요합니다."
         if outcome.linked_codes:

@@ -51,7 +51,7 @@ def test_development_completion_scenarios(tmp_path: Path) -> None:
     assert NormalLearner(ctx.database, ctx.settings, fake.factory).generate_draft(normal).status == "OK"
     # 4. 부족한 정보 질문 (규칙 + AI)
     open_q = questions.refresh(normal)
-    assert any(q.trigger == "NORMAL_RATIONALE_MISSING" and q.required for q in open_q)
+    assert any(q.trigger == "NORMAL_RATIONALE_MISSING" and not q.required for q in open_q)  # CR-06: 선택
     assert any(q.generated_by == "AI" for q in open_q)
     # 5. 답변·승인
     rationale = next(q for q in open_q if q.trigger == "NORMAL_RATIONALE_MISSING" and q.generated_by == "RULE")
@@ -74,7 +74,7 @@ def test_development_completion_scenarios(tmp_path: Path) -> None:
         learner.attach(abnormal, doc, kind)
     # 7. 가이드 구조화 + 확인 질문
     ab_q = {q.trigger: q for q in questions.refresh(abnormal)}
-    assert ab_q["CAUSE_STATUS_UNKNOWN"].required
+    assert not ab_q["CAUSE_STATUS_UNKNOWN"].required  # CR-06: 선택
     questions.answer(ab_q["CAUSE_STATUS_UNKNOWN"].id, "CHOICE", value="SUSPECTED")
     cases.update(abnormal, **learner.suggest_fields(abnormal))
     # 8. 비정상 사례 승인

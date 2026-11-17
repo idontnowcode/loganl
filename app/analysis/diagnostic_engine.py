@@ -16,7 +16,14 @@ from typing import Any
 from app import __version__
 from app.ai.ollama_client import OllamaClient
 from app.analysis.anomaly_detector import Finding, detect
-from app.analysis.case_retriever import SimilarCase, approved_normal_types, find_similar
+from app.analysis.case_retriever import (
+    SimilarCase,
+    approved_normal_types,
+    find_similar,
+    normal_types_for_cases,
+    reference_normals,
+)
+from app.analysis.reference_matcher import ReferenceMatch, match_references
 from app.analysis.result_builder import ResponseGuidance, build_response_guidance
 from app.config import AppSettings
 from app.core.cancel import NEVER_CANCEL, Cancelled, CancelToken
@@ -62,6 +69,7 @@ class AnalysisResult:
     notes: list[str] = field(default_factory=list)
     merged_files: set[int] = field(default_factory=set)  # 시각으로 한 시간축에 합친 파일
     ai: Any = None  # DiagnosisOutcome
+    references: list[ReferenceMatch] = field(default_factory=list)  # 참고 자료 — 로그에 나온 코드 (CR-04)
 
 
 @dataclass
@@ -125,13 +133,25 @@ class DiagnosticEngine:
             notes.append(f"수집 세션 {len(sessions)}개는 서로 시간축을 합치지 않고 따로 분석했습니다.")
         cancel.raise_if_cancelled()
 
-        report(1, STEPS, "결정론 분석(명시적 오류·누락·순서·반복·지연)")
-        normal_types = approved_normal_types(self.database, request.mode_id)
+        report(1, STEPS, "비슷한 정상 로그 찾기 · 결정론 분석(명시적 오류·누락·순서·반복·지연)")
+        similar_normal = find_similar(self.database, features, "NORMAL", request.mode_id)
+        reference: list = []
+        if request.mode_id is None:
+            # CR-06 LI-06: 모드를 고르지 않으면 가장 비슷한 승인 정상 로그를 기준으로 '본 적 없는 이벤트'를 찾는다.
+            # 사용자가 확정한 패턴은 모드에 묶여 있으므로 쓰지 않는다(→ '승인된 규칙 위반'은 나오지 않음).
+            reference = reference_normals(similar_normal)
+            normal_types = normal_types_for_cases(self.database, [s.case.id for s in reference])
+            if reference:
+                notes.append("운전 모드를 고르지 않아 가장 비슷한 정상 로그 " + ", ".join(
+                    f"{s.case.label}(점수 {s.similarity:.2f})" for s in reference) + "와 비교했습니다. 점수는 확률이 아닙니다.")
+            elif any_normal:
+                notes.append("운전 모드를 고르지 않았고, 점수 0.4 이상인 비슷한 정상 로그가 없어 정상 패턴과 비교하지 못했습니다.")
+        else:
+            normal_types = approved_normal_types(self.database, request.mode_id)
         findings = detect(features, patterns, normal_types)
         cancel.raise_if_cancelled()
 
         report(2, STEPS, "승인된 사례 검색")
-        similar_normal = find_similar(self.database, features, "NORMAL", request.mode_id)
         similar_abnormal = find_similar(self.database, features, "ABNORMAL", None)  # 비정상은 모드가 달라도 찾는다
         for s in similar_normal:
             findings.append(Finding("RETRIEVAL", "SIMILAR_NORMAL_CASE", f"비슷한 정상 사례 {s.case.label}: {s.explain()}",
@@ -156,13 +176,21 @@ class DiagnosticEngine:
             findings.append(Finding("RETRIEVAL", "GUIDE_REFERENCE", f"[{item.case_label}] 원인 확인 방법: {item.content[:200]}",
                                     case_id=item.case_id, guide_item_id=item.item_id, detail={"section": item.section}))
         findings.extend(self._knowledge_refs([s for s in similar_abnormal if s.relevant]))
+        # CR-04 REF-04: 승인된 참고 자료에 있는 코드가 로그에 나오면 따로 보여 준다(권장 대응과 섞지 않음).
+        references = match_references(self.database, request.log_file_ids)
+        for match in references:
+            findings.append(Finding(
+                "RETRIEVAL", "TEXT_MATCH", match.summary(), log_file_id=match.first_log_file_id,
+                event_id=match.first_event_id, line_start=match.first_line,
+                detail={"role": "REFERENCE_MATCH", "code": match.code, "count": match.count, "via": match.via,
+                        "entries": [hit.as_dict() for hit in match.entries]}))
 
         axes = self._axes(request, features, findings, patterns, similar_normal, similar_abnormal, guidance,
-                          any_normal, any_abnormal, normal_types)
+                          any_normal, any_abnormal, normal_types, reference_found=bool(reference))
         keys = self._store(run_id, findings)
         self._finish(run_id, status="COMPLETED", **axes)
         result = AnalysisResult(run_id, axes, findings, similar_normal, similar_abnormal, guidance, keys, notes,
-                                merged_files)
+                                merged_files, references=references)
         report(4, STEPS, "결정론·검색 단계 완료")
         if request.use_ai:
             result.ai = self.ai_layer(result, request, cancel)
@@ -227,6 +255,15 @@ class DiagnosticEngine:
             kind = {"SIMILAR_NORMAL_CASE": "CASE", "SIMILAR_ABNORMAL_CASE": "CASE", "GUIDE_REFERENCE": "GUIDE",
                     "RESPONSE_REFERENCE": "RESPONSE"}.get(finding.finding_type, "FINDING")
             text = f"[{finding.finding_type}] {finding.summary}"
+            if finding.detail.get("role") == "REFERENCE_MATCH":
+                # 승인된 참고 자료(사용자 코드 사전): 코드 뜻의 근거로만 쓴다(V-5). 관측 사실·대응 순서 근거는 아님.
+                kind = "REFERENCE"
+                text = f"[참고 자료] 코드 {finding.detail['code']} (로그에 {finding.detail['count']}회)" + "".join(
+                    f"\n- 출처 {e['document_title']}{(' · ' + e['locator']) if e.get('locator') else ''}: "
+                    + "; ".join(f"{label} {e[name]}" for name, label in (("title", "명칭"), ("description", "설명"),
+                                                                        ("cause", "원인"), ("action", "조치"))
+                                if e.get(name))
+                    for e in finding.detail["entries"][:3])
             if finding.event_id in raw:
                 text += f"\n원문({finding.line_start}행): {raw[finding.event_id][:300]}"
             package.add_with_key(key, kind, text, log_file_id=finding.log_file_id, event_id=finding.event_id,
@@ -303,7 +340,8 @@ class DiagnosticEngine:
 
     @staticmethod
     def _axes(request, features: list[FileFeatures], findings: list[Finding], patterns, similar_normal,
-              similar_abnormal, guidance, any_normal: bool, any_abnormal: bool, normal_types) -> dict[str, str]:
+              similar_abnormal, guidance, any_normal: bool, any_abnormal: bool, normal_types,
+              reference_found: bool = False) -> dict[str, str]:
         types = {f.finding_type for f in findings}
         violations = types & {"MISSING_EVENT", "ORDER_VIOLATION"}
         suspects = types & {"EXPLICIT_ERROR", "REPETITION", "LATENCY"}
@@ -329,7 +367,8 @@ class DiagnosticEngine:
             similar = "NOT_EVALUATED"
         else:
             similar = "FOUND" if any(s.relevant for s in similar_abnormal) else "NOT_FOUND"
-        mode_known = request.mode_id is not None and request.mode_confirmed
+        # 비교 기준: 확인된 운전 모드, 또는 모드 없이 고른 비슷한 정상 로그(CR-06 LI-06)
+        mode_known = (request.mode_id is not None and request.mode_confirmed) or reference_found
         timestamps_known = all(f.timestamp_basis not in ("UNKNOWN",) for f in features)
         if not any_normal and not any_abnormal:
             sufficiency = "INSUFFICIENT"

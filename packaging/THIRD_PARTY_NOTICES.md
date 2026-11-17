@@ -9,6 +9,8 @@
 | pydantic, pydantic-core | 데이터 검증 | MIT |
 | httpx, httpcore, h11, anyio, idna, certifi | 로컬 Ollama 통신 | BSD-3 / MIT / MPL-2.0(certifi) |
 | SQLite (Python 내장) | 데이터베이스 | Public Domain |
+| openpyxl, et_xmlfile | 참고 자료 엑셀(.xlsx) 읽기 (CR-04) | MIT |
+| pypdf | 참고 자료 PDF 글자 읽기 (CR-04) | BSD-3-Clause |
 | Ollama (휴대용 동봉 시, `ollama\`) | 로컬 AI 서버 | MIT. 함께 든 llama.cpp·ggml(MIT)·Go 런타임(BSD-3) 고지는 `ollama\lib\ollama\*_LICENSE` |
 | AI 모델 (휴대용 동봉 시) | 로컬 추론 | 모델별 라이선스. 전문은 `ollama\LICENSE_<모델>.txt` (예: Gemma Terms of Use) |
 | NVIDIA CUDA·AMD ROCm 런타임 (동봉 GPU 선택에 따라) | GPU 가속 | 각 제조사 재배포 조건 |

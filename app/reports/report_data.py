@@ -64,6 +64,10 @@ def load_report(database: Database, run_id: int) -> dict[str, Any]:
                                "case": case.label if case else None, "source": detail(r).get("source")})
     checks = [{"key": r["evidence_key"], "text": r["summary"]} for r in rows
               if r["finding_type"] == "GUIDE_REFERENCE" and detail(r).get("section") == "CHECK_METHOD"]
+    names = {f.id: f.original_name for f in files}
+    references = [{"key": r["evidence_key"], "code": detail(r).get("code"), "count": detail(r).get("count"),
+                   "file": names.get(r["log_file_id"]), "line": r["line_start"], "entries": detail(r).get("entries", [])}
+                  for r in rows if r["finding_type"] == "TEXT_MATCH" and detail(r).get("role") == "REFERENCE_MATCH"]
     ai_rows = [r for r in rows if r["layer"] == "AI"]
 
     def ai_items(kind: str, role: str | None = None) -> list[dict[str, Any]]:
@@ -77,7 +81,7 @@ def load_report(database: Database, run_id: int) -> dict[str, Any]:
 
     return {
         "app": f"{APP_NAME} {__version__}",
-        "plan": "LLA-DEV-PLAN-001 v0.2 R01 + CR-01",
+        "plan": "LLA-DEV-PLAN-001 v0.2 R01 + CR-01·04·06",
         "generated_at": utc_now_iso(),
         "run": {"id": run_id, "label": f"R-{run_id:04d}", "status": run["status"], "started_at": run["started_at"],
                 "finished_at": run["finished_at"], "mode": mode.name if mode else None,
@@ -88,6 +92,7 @@ def load_report(database: Database, run_id: int) -> dict[str, Any]:
         "axes": {axis: {"title": title, "value": run[axis], "text": labels.get(run[axis], run[axis])}
                  for axis, (title, labels) in AXIS_TEXT.items()},
         "guidance": {"level": run["response_guidance"], "items": guidance_items, "checks": checks},
+        "references": references,
         "findings": [{"key": r["evidence_key"], "layer": r["layer"], "type": r["finding_type"], "summary": r["summary"],
                       "file_id": r["log_file_id"], "line": r["line_start"], "case": cases[r["case_id"]].label
                       if r["case_id"] in cases else None, "score": r["similarity"]}
@@ -117,6 +122,19 @@ def save_reports(database: Database, paths, run_id: int) -> tuple[str, str]:
     return rel_json, rel_html
 
 
+REFERENCE_FIELDS = (("title", "명칭"), ("description", "설명"), ("cause", "원인"), ("action", "조치"))
+
+
+def reference_lines(ref: dict[str, Any]) -> list[str]:
+    """참고 자료 일치 하나를 글 줄로: 코드·횟수·첫 위치, 출처마다 명칭·설명·원인·조치."""
+    lines = [f"{ref['code']} ×{ref['count']} (처음 {ref['file']} {ref['line']}행)"]
+    for entry in ref["entries"]:
+        values = " / ".join(f"{label}: {entry[name]}" for name, label in REFERENCE_FIELDS if entry.get(name))
+        source = entry["document_title"] + (f" · {entry['locator']}" if entry.get("locator") else "")
+        lines.append(f"  {values or '(설명 없음)'}  [출처 {source}]")
+    return lines
+
+
 def report_text(data: dict[str, Any]) -> str:
     """화면의 '결과 다시 보기'용 짧은 글."""
     lines = [f"{data['run']['label']} · {data['run']['status']} · 시작 {data['run']['started_at']}"]
@@ -124,6 +142,10 @@ def report_text(data: dict[str, Any]) -> str:
     lines.append("")
     lines.append(f"[권장 대응 — {data['axes']['response_guidance']['text']}]")
     lines += [f"  [{i['label']}] {i['text']}  (출처 {i['case']} · {i['source'] or '-'})" for i in data["guidance"]["items"]]
+    if data.get("references"):
+        lines.append("")
+        lines.append("[참고 자료 — 로그에 나온 코드]")
+        lines += [f"  {line}" for ref in data["references"] for line in reference_lines(ref)]
     lines.append("")
     lines += [f"{a['title']}: {a['text']}" for a in data["axes"].values()]
     lines.append("")

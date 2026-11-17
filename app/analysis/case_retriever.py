@@ -19,6 +19,7 @@ from app.storage.database import Database
 from app.storage.repositories import CaseRepository, SearchRepository
 
 SIMILAR_THRESHOLD = 0.4
+REFERENCE_LIMIT = 3  # 운전 모드 없이 분석할 때 기준으로 삼을 정상 로그 수 (CR-06 LI-06)
 
 
 @dataclass
@@ -84,6 +85,22 @@ def find_similar(database: Database, input_files: Sequence[FileFeatures], case_t
         results.append(SimilarCase(case, score, types, code_overlap, order, shared_types, shared_codes, text_hit))
     results.sort(key=lambda s: (s.relevant, s.similarity), reverse=True)
     return results[:limit]
+
+
+def reference_normals(similar_normal: Sequence[SimilarCase]) -> list[SimilarCase]:
+    """운전 모드를 고르지 않았을 때 비교 기준으로 삼을 정상 사례: 점수 0.4 이상 중 위에서 최대 3개."""
+    return [s for s in similar_normal if s.similarity >= SIMILAR_THRESHOLD][:REFERENCE_LIMIT]
+
+
+def normal_types_for_cases(database: Database, case_ids: Sequence[int]) -> dict[str | None, set[str]] | None:
+    """고른 정상 사례들에서 관찰된 이벤트 유형(로그 역할별). 사례가 없으면 None."""
+    if not case_ids:
+        return None
+    by_role: dict[str | None, set[str]] = {}
+    for case_id in case_ids:
+        for f in case_file_features(database, case_id):
+            by_role.setdefault(f.log_role, set()).update(f.type_counts)
+    return by_role
 
 
 def approved_normal_types(database: Database, mode_id: int | None) -> dict[str | None, set[str]] | None:

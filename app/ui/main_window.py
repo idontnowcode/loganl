@@ -1,7 +1,7 @@
-"""메인 화면 틀 (계획서 §8.1).
+"""메인 화면 틀 (계획서 §8.1, 변경 요청 CR-06).
 
-Phase 1: 상단 탭 3개와 보조 메뉴 5개의 자리, 상태 표시줄(데이터 폴더·DB·Ollama)을 만든다.
-각 탭은 해당 Phase에서 구현할 화면 구성(계획서 §8.2~8.4)을 보여 주는 자리 표시 화면이다.
+상단 탭은 '로그 입력'(정상·비정상 학습을 하나로, CR-06)과 '신규 로그 분석' 두 개, 보조 메뉴, 상태 표시줄
+(데이터 폴더·DB·Ollama). 예전 정상·비정상 학습 화면은 '자세히 편집' 창으로 연다.
 """
 
 from __future__ import annotations
@@ -30,15 +30,16 @@ from app.ai.ollama_client import OllamaClient, OllamaStatus
 from app.bootstrap import AppContext
 from app.config import AppSettings, OllamaSettings
 from app.models.enums import OriginPurpose
-from app.ui.abnormal_learning import AbnormalLearningPage
 from app.ui.analysis_history import AnalysisHistoryDialog
 from app.ui.backup_dialog import BackupDialog
+from app.ui.case_detail_dialog import CaseDetailDialog
 from app.ui.case_review import CaseReviewDialog
 from app.ui.knowledge_manager import KnowledgeDialog
 from app.ui.log_analysis import LogAnalysisPage
+from app.ui.log_entry import LogEntryPage
 from app.ui.log_import_panel import LogImportPanel
 from app.ui.mode_dialog import ModeDialog
-from app.ui.normal_learning import NormalLearningPage
+from app.ui.reference_manager import ReferenceManagerDialog
 from app.ui.settings_dialog import SettingsDialog
 from app.ui.theme import set_role
 from app.ui.workers import FunctionWorker, WorkerSignals
@@ -69,20 +70,11 @@ class PlannedScreen:
 
 PLANNED_SCREENS: tuple[PlannedScreen, ...] = (
     PlannedScreen(
-        "정상 로그 학습",
-        "Phase 3",
+        "로그 입력",
+        "CR-06",
         (
-            "복수 로그 입력", "로그 파일 목록", "사용자 메모", "AI 추정 운전 모드", "운전 조건",
-            "로그 미리보기", "이벤트 타임라인", "정상 패턴 후보", "AI 확인 질문", "학습 초안 편집", "승인 및 저장",
-        ),
-    ),
-    PlannedScreen(
-        "비정상 로그 학습",
-        "Phase 4",
-        (
-            "복수 로그 입력", "수집 세션 구분", "TXT/MD 진단 가이드 첨부 (필수)", "대응 매뉴얼 첨부 (선택)",
-            "가이드·매뉴얼 원문 미리보기", "AI 구조화 결과", "오류 증상 및 판정 기준", "원인 및 진단 절차",
-            "해결 방법·대응 절차", "AI 확인 질문", "사용자 수정", "승인 및 저장",
+            "복수 로그 입력", "로그 미리보기", "이벤트 타임라인", "파일마다 정상/비정상", "동작 메모",
+            "에러로 판단한 근거(비정상)", "저장 = 학습", "저장된 로그 목록", "자세히 편집(패턴·가이드·질문)",
         ),
     ),
     PlannedScreen(
@@ -100,6 +92,7 @@ PLANNED_SCREENS: tuple[PlannedScreen, ...] = (
 AUX_MENU: tuple[tuple[str, str | None], ...] = (
     ("학습 사례 관리", None),
     ("분석 이력", None),
+    ("참고 자료 관리", None),
     ("운전 모드 관리", None),
     ("설정", None),
     ("백업 및 복원", None),
@@ -179,15 +172,13 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
         self.import_panels: list[LogImportPanel] = []
-        self.normal_page = NormalLearningPage(context, client_factory)
-        self.abnormal_page = AbnormalLearningPage(context, client_factory)
-        for page, screen in ((self.normal_page, PLANNED_SCREENS[0]), (self.abnormal_page, PLANNED_SCREENS[1])):
-            self.import_panels.append(page.import_panel)
-            self.tabs.addTab(page, screen.title)
+        self.entry_page = LogEntryPage(context, client_factory, open_detail=self.open_case)
+        self.import_panels.append(self.entry_page.import_panel)
+        self.tabs.addTab(self.entry_page, PLANNED_SCREENS[0].title)
         self.analysis_page = LogAnalysisPage(context, client_factory)
         self.analysis_page.register_requested.connect(self.register_case_from_analysis)
         self.import_panels.append(self.analysis_page.import_panel)
-        self.tabs.addTab(self.analysis_page, PLANNED_SCREENS[2].title)
+        self.tabs.addTab(self.analysis_page, PLANNED_SCREENS[1].title)
         self.tabs.currentChanged.connect(lambda _i: self.flush_autosave())
 
         central = QWidget()
@@ -212,8 +203,7 @@ class MainWindow(QMainWindow):
         self._build_menus()
         self._build_status_bar()
         self.refresh_hint()
-        for page in (self.normal_page, self.abnormal_page):
-            page.case_saved.connect(lambda _id: self.refresh_hint())
+        self.entry_page.entry_saved.connect(lambda _id: self.refresh_hint())
         self.refresh_ollama_status()
 
     # ── 메뉴 ──
@@ -231,6 +221,7 @@ class MainWindow(QMainWindow):
             self.menu_actions[name] = action
         self.menu_actions["설정"].triggered.connect(self.open_settings)
         self.menu_actions["운전 모드 관리"].triggered.connect(self.open_modes)
+        self.menu_actions["참고 자료 관리"].triggered.connect(self.open_references)
         self.menu_actions["학습 사례 관리"].triggered.connect(self.open_case_review)
         self.menu_actions["분석 이력"].triggered.connect(self.open_history)
         self.menu_actions["백업 및 복원"].triggered.connect(self.open_backup)
@@ -316,28 +307,29 @@ class MainWindow(QMainWindow):
         self.ollama_label.setToolTip(message)
 
     # ── 사례·이력·백업 ──
-    def open_case(self, case_type: str, case_id: int) -> None:
-        page = self.normal_page if case_type == "NORMAL" else self.abnormal_page
-        page.refresh_cases()
-        page.load_case(case_id)
-        self.tabs.setCurrentWidget(page)
+    def open_case(self, case_type: str, case_id: int | None) -> CaseDetailDialog:
+        """사례 자세히 편집 창(예전 학습 화면, CR-06 LI-07)."""
+        dialog = CaseDetailDialog(self.context, case_type, case_id, self.client_factory, self)
+        self.detail_dialog = dialog  # 시험에서 열린 창을 찾을 수 있게
+        dialog.finished.connect(lambda _r: self._after_detail())
+        dialog.open()
+        return dialog
 
-    def register_case_from_analysis(self, case_type: str, log_file_ids: list, title: str) -> int:
-        page = self.normal_page if case_type == "NORMAL" else self.abnormal_page
-        request = self.analysis_page.build_request()
-        case_id = page.cases.create(case_type, title, log_file_ids, mode_id=request.mode_id,
-                                    mode_confirmed=request.mode_confirmed,
-                                    operating_conditions=request.operating_conditions,
-                                    user_description=request.user_description if case_type == "ABNORMAL" else None)
-        self.open_case(case_type, case_id)
-        self.statusBar().showMessage(f"분석한 로그로 학습 사례 초안 C-{case_id:04d}을(를) 만들었습니다.", 10_000)
-        return case_id
+    def _after_detail(self) -> None:
+        self.entry_page.refresh_entries()
+        self.entry_page.refresh_saved()
+        self.refresh_hint()
+
+    def register_case_from_analysis(self, case_type: str, log_file_ids: list, title: str) -> None:
+        """분석한 로그를 로그 입력 탭에 올리고 구분을 미리 골라 둔다(저장은 사용자가, CR-06 LI-08)."""
+        self.entry_page.receive(list(log_file_ids), case_type)
+        self.tabs.setCurrentWidget(self.entry_page)
+        kind = "정상" if case_type == "NORMAL" else "비정상"
+        self.statusBar().showMessage(f"분석한 로그를 로그 입력 탭에 '{kind}'으로 올렸습니다. 메모를 적고 저장하세요.", 10_000)
 
     def open_case_review(self) -> None:
         CaseReviewDialog(self.context, self.open_case, self).exec()
-        for page in (self.normal_page, self.abnormal_page):
-            page.refresh_cases()
-        self.refresh_hint()
+        self._after_detail()
 
     def open_history(self) -> None:
         AnalysisHistoryDialog(self.context, self).exec()
@@ -350,6 +342,13 @@ class MainWindow(QMainWindow):
         dialog.exec()
         if dialog.restored:
             QMessageBox.information(self, "복원", "복원했습니다. 앱을 닫고 다시 시작하세요.")
+
+    def open_references(self) -> ReferenceManagerDialog:
+        """참고 자료 관리 (CR-04): 오류 코드 목록·설명 문서를 올리고 승인한다."""
+        dialog = ReferenceManagerDialog(self.context, self)
+        self.reference_dialog = dialog  # 시험에서 열린 창을 찾을 수 있게
+        dialog.open()
+        return dialog
 
     # ── 운전 모드 ──
     def open_modes(self) -> None:
@@ -420,15 +419,13 @@ class MainWindow(QMainWindow):
 
     def first_run_hint(self) -> str:
         """처음 쓰는 사람에게 보여 줄 안내. 할 일이 없으면 빈 문자열."""
-        from app.learning.case_manager import CaseManager, ModeManager
+        from app.learning.case_manager import CaseManager
 
         steps = []
-        if not ModeManager(self.context.database).list(active_only=True):
-            steps.append("'관리 → 운전 모드 관리'에서 장비의 운전 모드를 등록하세요")
+        if not any(c.status == "APPROVED" for c in CaseManager(self.context.database).list()):
+            steps.append("'로그 입력' 탭에서 정상 로그를 하나 이상 저장해야 신규 로그를 비교할 수 있습니다")
         if not self.context.settings.ollama.model:
             steps.append("'관리 → 설정'에서 사용할 로컬 AI 모델을 고르세요(없어도 AI 외 기능은 동작)")
-        if not any(c.status == "APPROVED" for c in CaseManager(self.context.database).list()):
-            steps.append("정상·비정상 사례를 하나 이상 승인해야 신규 로그를 비교할 수 있습니다")
         if not steps:
             return ""
         return "처음 사용 안내: " + " · ".join(f"{i}) {s}" for i, s in enumerate(steps, start=1)) + \
@@ -442,8 +439,7 @@ class MainWindow(QMainWindow):
 
     # ── 종료 ──
     def flush_autosave(self) -> None:
-        for page in (self.normal_page, self.abnormal_page):
-            page.autosave()
+        self.entry_page.autosave()
 
     def shutdown(self) -> None:
         """입력 중이던 내용을 자동 저장하고, 진행 중인 백그라운드 작업을 취소하고 끝나기를 잠깐 기다린다."""

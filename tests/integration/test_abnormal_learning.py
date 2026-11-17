@@ -50,12 +50,16 @@ def case(ctx, tmp_path: Path):
     return case_id, AbnormalLearner(ctx.database, ctx.paths, ctx.settings)
 
 
-def test_guide_is_required_for_approval(ctx, case) -> None:  # AL-02
+def test_guide_is_optional_for_approval(ctx, case) -> None:  # AL-02 → CR-06 LI-05
     case_id, _ = case
-    CaseManager(ctx.database).update(case_id, symptom="증상", abnormal_criteria="기준", cause_status="UNKNOWN")
-    check = ApprovalWorkflow(ctx.database).check(case_id)
-    assert any("진단 가이드" in b for b in check.blocking)
-    assert any("대응 매뉴얼이 없습니다" in w for w in check.warnings)  # 매뉴얼은 경고만(선택)
+    workflow = ApprovalWorkflow(ctx.database)
+    blocked = workflow.check(case_id)
+    assert any("오류 증상" in b for b in blocked.blocking) and any("판정 기준" in b for b in blocked.blocking)
+    CaseManager(ctx.database).update(case_id, symptom="증상", abnormal_criteria="기준")
+    check = workflow.check(case_id)
+    assert check.ok  # 가이드·원인 확정 여부 없이도 승인할 수 있다
+    assert any("진단 가이드·대응 매뉴얼이 없습니다" in w for w in check.warnings)
+    assert any("원인 확정 여부" in w for w in check.warnings)
 
 
 def test_attach_structures_and_links(ctx, case, tmp_path: Path) -> None:  # T-AL-05, AL-06

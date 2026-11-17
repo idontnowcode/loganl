@@ -52,15 +52,19 @@ def test_empty_new_case_is_not_created(qtbot, ctx) -> None:
     assert page.autosave() is False and CaseManager(ctx.database).list() == []
 
 
-def test_close_flushes_pending_edits(qtbot, ctx) -> None:
+def test_close_flushes_pending_edits(qtbot, ctx, tmp_path: Path) -> None:
     status = lambda s: OllamaStatus(base_url=s.base_url, reachable=False)  # noqa: E731
     window = MainWindow(ctx, status_checker=status)
     qtbot.addWidget(window)
-    page = window.normal_page
-    page.title_edit.setText("닫기 전 입력")
-    page.mark_dirty()  # 타이머가 돌기 전에 닫는다
+    page = window.entry_page
+    ids = LogImporter(ctx.database, ctx.paths, ctx.settings.import_).import_logs(ImportRequest(
+        paths=[write(tmp_path / "close.log", iso_lines(NORMAL_SEQUENCE))], purpose=OriginPurpose.NORMAL_CASE,
+        session_mode=SessionMode.SEPARATE)).log_file_ids
+    page.import_panel.set_log_file_ids(ids)
+    page.normal_radio.setChecked(True)
+    page.memo_edit.setPlainText("닫기 전 입력")  # 저장 버튼을 누르기 전에 닫는다
     window.close()
-    assert [c.title for c in CaseManager(ctx.database).list()] == ["닫기 전 입력"]
+    assert [(c.operating_conditions, c.status) for c in CaseManager(ctx.database).list()] == [("닫기 전 입력", "APPROVED")]
 
 
 def test_approved_case_is_not_autosaved(qtbot, ctx) -> None:

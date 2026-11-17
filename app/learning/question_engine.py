@@ -94,12 +94,12 @@ class QuestionEngine:
         if case.mode_id is None or not case.mode_confirmed:
             out.append(QuestionCandidate(
                 "MODE_UNKNOWN", "이 로그를 수집할 때 장비의 운전 모드는 무엇이었나요?",
-                "정상 패턴과 사례 비교는 운전 모드별로 합니다." + (" 정상 사례 승인에 필수입니다." if normal else ""),
-                90, normal, "mode"))
+                "운전 모드가 있으면 같은 모드끼리 비교하고 패턴을 확정할 수 있습니다(선택, CR-06).",
+                90, False, "mode"))
         if normal and not (case.normal_rationale or "").strip():
             out.append(QuestionCandidate(
                 "NORMAL_RATIONALE_MISSING", "이 로그를 정상으로 판단한 근거는 무엇인가요?",
-                "정상 판정 근거는 정상 사례 승인에 필수입니다(계획서 §3.1).", 85, True, "normal_rationale"))
+                "근거가 있으면 나중에 사례를 이해하기 쉽습니다(선택, CR-06).", 85, False, "normal_rationale"))
         if len(files) >= 2:
             unconfirmed = [f for f in files if not SessionRepository(conn).get(f.session_id).relation_confirmed]
             if unconfirmed:
@@ -119,8 +119,8 @@ class QuestionEngine:
             if not guides.attachments(case_id, "DIAGNOSTIC_GUIDE"):
                 out.append(QuestionCandidate(
                     "GUIDE_INFO_MISSING", "이 비정상 사례의 진단 가이드(TXT/MD)를 첨부해 주세요.",
-                    "진단 가이드 첨부는 필수입니다(§3.2). 답 대신 '진단 가이드 첨부'로 해결합니다.",
-                    95, True, "guide:attach"))
+                    "가이드가 있으면 원인·조치를 함께 학습합니다(선택, CR-06). 답 대신 '진단 가이드 첨부'로 해결합니다.",
+                    95, False, "guide:attach"))
             else:
                 live = {row["section"] for row in guides.items(case_id)
                         if row["status"] != "REJECTED" and row["attachment_kind"] in ("DIAGNOSTIC_GUIDE", None)}
@@ -133,7 +133,7 @@ class QuestionEngine:
             if case.cause_status is None:
                 out.append(QuestionCandidate(
                     "CAUSE_STATUS_UNKNOWN", "이 오류의 원인은 확정됐나요?",
-                    "원인 확정 여부를 따로 관리합니다(§3.2). 미확정이어도 등록할 수 있습니다.", 80, True, "cause"))
+                    "원인 확정 여부를 따로 관리합니다(§3.2). 미확정이어도 등록할 수 있습니다.", 80, False, "cause"))
             criteria = (case.abnormal_criteria or "").strip()
             if criteria and not re.search(r"\d", criteria):
                 out.append(QuestionCandidate(

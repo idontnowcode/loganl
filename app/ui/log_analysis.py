@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QListWidget,
+    QListWidgetItem,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
@@ -33,9 +34,12 @@ from app.analysis.diagnostic_engine import AnalysisRequest, AnalysisResult, Diag
 from app.bootstrap import AppContext
 from app.core.cancel import CancelToken
 from app.learning.case_manager import ModeManager
+from app.learning.intake import IntakeResult, IntakeService
+from app.learning.normal_learner import default_client_factory
 from app.models.enums import OriginPurpose
 from app.ui.case_editor import set_form_note, text_box
 from app.ui.log_import_panel import LogImportPanel
+from app.ui.natural_input import Collapsible, StoryBox, SummaryRow
 from app.ui.theme import comfortable_table, fit_list_height, scroll_wrap, set_role
 from app.ui.workers import TaskRunner
 
@@ -101,7 +105,16 @@ class LogAnalysisPage(QWidget):
         self.mode_label = QLabel()
         self.mode_label.setWordWrap(True)
         self.conditions_edit = text_box(40, "운전 조건 (선택)")
-        self.description_edit = text_box(40, "사용자 설명 (선택)")
+        # CR-05: 상황은 글 한 칸에. 운전 모드·조건 칸은 접어 두고 'AI로 정리'가 글에서 채운다.
+        self.story = StoryBox(
+            "이번 로그 상황을 편하게 적어 주세요 (선택)",
+            "예) ○○ 모드로 돌리던 중 멈췄고 TEST-E001이 화면에 떴음. 어제부터 가끔 그럼.",
+            "적은 글은 AI 원인 가설에 참고로 들어갑니다. 'AI로 정리'를 누르면 운전 모드·조건을 글에서 찾아 채웁니다.")
+        self.description_edit = self.story.edit
+        self.story.organize_button.clicked.connect(self.organize_story)
+        self.mode_ok_button = QPushButton("이 모드가 맞음")
+        self.mode_ok_button.clicked.connect(lambda: self.mode_confirm.setChecked(True))
+        self.mode_ok_button.hide()
         self.use_ai = QCheckBox("AI 원인 가설도 만들기(로컬 Ollama)")
         self.use_ai.setChecked(True)
         mode_row = QHBoxLayout()
@@ -117,8 +130,13 @@ class LogAnalysisPage(QWidget):
         form.setRowVisible(self.mode_label, False)
         self.mode_form = form
         form.addRow("운전 조건", self.conditions_edit)
-        form.addRow("설명", self.description_edit)
-        form.addRow("", self.use_ai)
+        manual = QWidget()
+        manual.setLayout(form)
+        form.setContentsMargins(0, 0, 0, 0)
+        self.fields_section = Collapsible("칸으로 직접 고치기 (운전 모드·운전 조건)", manual)
+        self.mode_combo.currentIndexChanged.connect(lambda _i: self.refresh_summary())
+        self.mode_confirm.toggled.connect(lambda _c: self.refresh_summary())
+        self.conditions_edit.textChanged.connect(self.refresh_summary)
 
         self.run_button = QPushButton("분석 실행")
         set_role(self.run_button, variant="primary")
@@ -149,6 +167,21 @@ class LogAnalysisPage(QWidget):
         self.guidance_list.setWordWrap(True)
         guidance_layout.addLayout(stamp_row)
         guidance_layout.addWidget(self.guidance_list)
+
+        # CR-04: 승인된 참고 자료에 있는 코드가 로그에 나오면 따로 보여 준다(권장 대응과 섞지 않음)
+        self.reference_box = QGroupBox("참고 자료 — 로그에 나온 코드 (승인된 참고 자료, 권장 대응과 별개)")
+        reference_layout = QVBoxLayout(self.reference_box)
+        self.reference_message = QLabel("분석을 실행하면 로그에 나온 코드 중 참고 자료에 있는 것을 보여 줍니다.")
+        self.reference_message.setWordWrap(True)
+        set_role(self.reference_message, "muted")
+        self.reference_list = QListWidget()
+        self.reference_list.setWordWrap(True)
+        self.reference_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.reference_list.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self.reference_list.itemDoubleClicked.connect(self.jump_to_reference)
+        self.reference_list.hide()
+        reference_layout.addWidget(self.reference_message)
+        reference_layout.addWidget(self.reference_list)
 
         # 결과 축 = 표제란 칸 (DESIGN.md): 라벨 칸 네 개를 한 줄에
         self.axis_cells: dict[str, QLabel] = {}
@@ -215,6 +248,7 @@ class LogAnalysisPage(QWidget):
 
         results = QVBoxLayout()
         results.addWidget(self.guidance_box)
+        results.addWidget(self.reference_box)
         results.addWidget(section_label("결과 분류 (서로 독립된 판정)"))
         results.addLayout(self.axes_row)
         results.addWidget(self.axes_label)
@@ -227,13 +261,15 @@ class LogAnalysisPage(QWidget):
         results.addWidget(self.report_label)
         results.addStretch(1)
 
-        steps = QLabel("진행 순서  ① 왼쪽에 분석할 로그를 넣고 가져오기 → ② 운전 모드를 고르고 '확인함'(모르면 '모름') → "
+        steps = QLabel("진행 순서  ① 왼쪽에 분석할 로그를 넣고 가져오기 → ② (선택) 아래 칸에 상황을 편하게 적기 → "
                        "③ '분석 실행' → ④ 맨 위 '권장 대응'과 근거 확인 → ⑤ 보고서 저장")
         steps.setWordWrap(True)
         set_role(steps, "hint")
         side = QVBoxLayout()
         side.addWidget(steps)
-        side.addLayout(form)
+        side.addWidget(self.story)
+        side.addWidget(self.fields_section)
+        side.addWidget(self.use_ai)
         side.addLayout(run_row)
         side.addLayout(results)
         side_widget = QWidget()
@@ -253,6 +289,50 @@ class LogAnalysisPage(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.addWidget(split)
         self.refresh_modes()
+        self.refresh_summary()
+
+    # ── 자유 글 (CR-05) ──
+    def refresh_summary(self) -> None:
+        mode_id = self.mode_combo.currentData()
+        mode_name = self.mode_combo.currentText() if mode_id is not None else None
+        pending = mode_name is not None and not self.mode_confirm.isChecked()
+        self.story.set_summary([
+            SummaryRow("운전 모드", mode_name, pending="확인 전" if pending else None,
+                       action=self.mode_ok_button if pending else None),
+            SummaryRow("운전 조건", self.conditions_edit.toPlainText().strip() or None),
+        ])
+
+    def organize_story(self) -> None:
+        text = self.story.text()
+        if not text:
+            self.story.result_label.setText("먼저 위 칸에 상황을 편하게 적어 주세요.")
+            return
+        if self.runner.busy:
+            return
+        service = IntakeService(self.context.database, self.context.settings,
+                                self.client_factory or default_client_factory(self.context.settings))
+        self.story.organize_button.setEnabled(False)
+        self.story.result_label.setText("AI가 내 글에서 운전 모드·조건을 찾는 중…")
+        self.runner.start(service.organize_text, text, "ANALYSIS", on_done=self._on_organized,
+                          on_error=self._on_organize_error)
+
+    def _on_organized(self, result: IntakeResult) -> None:
+        self.story.organize_button.setEnabled(True)
+        if result.mode_id is not None and result.mode_id != self.mode_combo.currentData():
+            self.refresh_modes()
+            self.mode_combo.setCurrentIndex(max(self.mode_combo.findData(result.mode_id), 0))
+            self.mode_confirm.setChecked(False)  # 사용자가 확인한다
+        if "operating_conditions" in result.fields:
+            self.conditions_edit.setPlainText(result.fields["operating_conditions"])
+        self.refresh_summary()
+        if result.status == "RULES_ONLY":
+            self.fields_section.set_expanded(True)
+        self.story.result_label.setText(result.message())
+
+    def _on_organize_error(self, message: str) -> None:
+        self.story.organize_button.setEnabled(True)
+        self.story.result_label.setText(f"정리하지 못했습니다: {message} '칸으로 직접 고치기'에서 고를 수 있습니다.")
+        self.fields_section.set_expanded(True)
 
     def _engine(self) -> DiagnosticEngine:
         return DiagnosticEngine(self.context.database, self.context.paths, self.context.settings, self.client_factory)
@@ -359,6 +439,8 @@ class LogAnalysisPage(QWidget):
         for item in guidance.check_methods:
             self.guidance_list.addItem(f"[원인 확인] {item.content}\n    출처: {item.case_label} · {item.source_name or '-'}")
         fit_list_height(self.guidance_list)  # 절차가 목록 안에서 잘려 보이지 않게(화면 전체가 스크롤된다)
+        self.guidance_list.setVisible(self.guidance_list.count() > 0)  # 대응이 없으면 빈 상자를 숨긴다
+        self.show_references(result)
 
         set_role(self.guidance_stamp, "stamp", GUIDANCE_TONE[guidance.level])
         self.guidance_stamp.setText(GUIDANCE_STAMP[guidance.level])
@@ -384,6 +466,40 @@ class LogAnalysisPage(QWidget):
         for button in (self.report_button, self.register_normal, self.register_abnormal):
             button.setEnabled(True)
         self.report_label.clear()
+
+    def show_references(self, result: AnalysisResult) -> None:
+        from app.reports.report_data import reference_lines
+
+        self.reference_list.clear()
+        for match in result.references:
+            ref = {"code": match.code, "count": match.count, "file": match.first_file_name, "line": match.first_line,
+                   "entries": [hit.as_dict() for hit in match.entries]}
+            item = QListWidgetItem("\n".join(reference_lines(ref)))
+            item.setData(Qt.ItemDataRole.UserRole, (match.first_log_file_id, match.first_line))
+            item.setToolTip("두 번 누르면 왼쪽 로그의 그 행으로 이동합니다.")
+            self.reference_list.addItem(item)
+        if result.references:
+            self.reference_message.setText(f"로그에 나온 코드 {len(result.references)}개가 승인된 참고 자료에 있습니다. "
+                                           "설명·원인·조치는 참고 자료 글 그대로입니다.")
+            fit_list_height(self.reference_list, minimum=60)
+            # 내용만큼(줄바꿈이 한 줄 늘어도 잘리지 않게 한 줄 여유). 기본 크기(192px)로 빈 공간이 생기지 않게 한다.
+            self.reference_list.setMaximumHeight(self.reference_list.minimumHeight()
+                                                 + self.reference_list.fontMetrics().height() * 2)
+        else:
+            from contextlib import closing
+
+            from app.storage.repositories import ReferenceRepository
+
+            with closing(self.context.database.connect()) as conn:
+                any_reference = bool(ReferenceRepository(conn).approved_entries())
+            self.reference_message.setText(
+                "로그에 나온 코드 중 승인된 참고 자료에 있는 것이 없습니다." if any_reference else
+                "승인된 참고 자료가 없습니다. 오류 코드 목록·설명 문서를 '관리 → 참고 자료 관리'에서 올리면 여기에 보입니다.")
+        self.reference_list.setVisible(bool(result.references))
+
+    def jump_to_reference(self, item: QListWidgetItem) -> bool:
+        log_file_id, line = item.data(Qt.ItemDataRole.UserRole)
+        return self.import_panel.show_line(log_file_id, line)
 
     def save_report(self) -> tuple[str, str] | None:
         if self.result is None:

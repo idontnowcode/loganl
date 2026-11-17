@@ -357,6 +357,20 @@ class CaseRepository:
                                  (case_id,))
         return [int(r[0]) for r in rows]
 
+    def single_log_cases(self, log_file_id: int | None = None) -> list[CaseRecord]:
+        """로그 파일 하나만 걸린 사례(로그 입력, CR-06). 보관·반려는 뺀다. log_file_id를 주면 그 파일의 것만."""
+        params: list[Any] = []
+        where = ""
+        if log_file_id is not None:
+            where = " AND l.log_file_id = ?"
+            params.append(log_file_id)
+        rows = self.conn.execute(
+            "SELECT c.*, l.log_file_id AS single_log_file_id FROM cases c JOIN case_log_files l ON l.case_id = c.id "
+            "WHERE c.status NOT IN ('ARCHIVED', 'REJECTED') "
+            "AND (SELECT COUNT(*) FROM case_log_files x WHERE x.case_id = c.id) = 1" + where +
+            " ORDER BY c.id DESC", tuple(params))
+        return [CaseRecord.model_validate({k: r[k] for k in r.keys() if k != "single_log_file_id"}) for r in rows]
+
     def link_logs(self, case_id: int, log_file_ids: Iterable[int]) -> None:
         now = utc_now_iso()
         self.conn.executemany(
@@ -747,3 +761,97 @@ class RevisionRepository:
     def for_case(self, case_id: int) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM case_revisions WHERE case_id = ? ORDER BY revision_no",
                                  (case_id,)).fetchall()
+
+
+REFERENCE_ENTRY_FIELDS = ("code", "title", "description", "cause", "action", "locator", "source_text")
+
+
+class ReferenceRepository:
+    """참고 자료(CR-04). 분석·AI는 approved_entries()(approved_reference_entries 뷰)만 쓴다."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self.conn = conn
+
+    def add_document(self, *, title: str, original_name: str, source_path: str | None, stored_path: str, sha256: str,
+                     size_bytes: int, fmt: str, column_map: Any = None) -> int:
+        cur = self.conn.execute(
+            "INSERT INTO reference_documents (title, original_name, source_path, stored_path, sha256, size_bytes, format,"
+            " column_map_json, imported_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (title, original_name, source_path, stored_path, sha256, size_bytes, fmt,
+             json.dumps(column_map, ensure_ascii=False) if column_map else None, utc_now_iso()))
+        return int(cur.lastrowid)
+
+    def document(self, document_id: int) -> sqlite3.Row | None:
+        return self.conn.execute(
+            "SELECT d.*, (SELECT COUNT(*) FROM reference_entries e WHERE e.document_id = d.id AND e.status = 'INCLUDED')"
+            " AS included_count FROM reference_documents d WHERE d.id = ?", (document_id,)).fetchone()
+
+    def by_sha256(self, sha256: str) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM reference_documents WHERE sha256 = ?", (sha256,)).fetchone()
+
+    def documents(self, statuses: Sequence[str] | None = None) -> list[sqlite3.Row]:
+        where = f" WHERE d.status IN ({placeholders(statuses)})" if statuses else ""
+        return self.conn.execute(
+            "SELECT d.*, (SELECT COUNT(*) FROM reference_entries e WHERE e.document_id = d.id AND e.status = 'INCLUDED')"
+            f" AS included_count FROM reference_documents d{where} ORDER BY d.id DESC", tuple(statuses or ())).fetchall()
+
+    def approved_with_title(self, title: str) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT * FROM reference_documents WHERE status = 'APPROVED' AND title = ?",
+                                 (title,)).fetchall()
+
+    def update_document(self, document_id: int, **fields: Any) -> None:
+        if "column_map" in fields:
+            value = fields.pop("column_map")
+            fields["column_map_json"] = json.dumps(value, ensure_ascii=False) if value else None
+        if not fields:
+            return
+        sets = ", ".join(f"{name} = ?" for name in fields)
+        self.conn.execute(f"UPDATE reference_documents SET {sets} WHERE id = ?", (*fields.values(), document_id))
+
+    def delete_document(self, document_id: int) -> None:
+        self.conn.execute("DELETE FROM reference_documents WHERE id = ?", (document_id,))
+
+    def add_entry(self, document_id: int, *, code: str, code_norm: str, source_kind: str, sort_order: int = 0,
+                  **fields: Any) -> int:
+        values = {name: fields.get(name) for name in REFERENCE_ENTRY_FIELDS if name != "code"}
+        now = utc_now_iso()
+        cur = self.conn.execute(
+            "INSERT INTO reference_entries (document_id, code, code_norm, title, description, cause, action, locator,"
+            " source_text, source_kind, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (document_id, code, code_norm, values["title"], values["description"], values["cause"], values["action"],
+             values["locator"], values["source_text"], source_kind, sort_order, now, now))
+        return int(cur.lastrowid)
+
+    def entries(self, document_id: int) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT * FROM reference_entries WHERE document_id = ? ORDER BY sort_order, id",
+                                 (document_id,)).fetchall()
+
+    def entry(self, entry_id: int) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM reference_entries WHERE id = ?", (entry_id,)).fetchone()
+
+    def update_entry(self, entry_id: int, **fields: Any) -> None:
+        if not fields:
+            return
+        fields["updated_at"] = utc_now_iso()
+        sets = ", ".join(f"{name} = ?" for name in fields)
+        self.conn.execute(f"UPDATE reference_entries SET {sets} WHERE id = ?", (*fields.values(), entry_id))
+
+    def delete_entries(self, document_id: int, source_kind: str | None = None) -> None:
+        if source_kind is None:
+            self.conn.execute("DELETE FROM reference_entries WHERE document_id = ?", (document_id,))
+        else:
+            self.conn.execute("DELETE FROM reference_entries WHERE document_id = ? AND source_kind = ?",
+                              (document_id, source_kind))
+
+    def delete_entry(self, entry_id: int) -> None:
+        self.conn.execute("DELETE FROM reference_entries WHERE id = ?", (entry_id,))
+
+    def approved_entries(self, code_norms: Sequence[str] | None = None) -> list[sqlite3.Row]:
+        """확정 지식으로 쓸 항목. approved_reference_entries 뷰만 읽는다."""
+        if code_norms is None:
+            return self.conn.execute("SELECT * FROM approved_reference_entries ORDER BY document_id, sort_order, id").fetchall()
+        if not code_norms:
+            return []
+        return self.conn.execute(
+            f"SELECT * FROM approved_reference_entries WHERE code_norm IN ({placeholders(code_norms)})"
+            " ORDER BY code_norm, document_id, sort_order, id", tuple(code_norms)).fetchall()

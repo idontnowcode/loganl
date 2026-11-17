@@ -64,10 +64,10 @@
 | `app/storage/database.py` | 연결·PRAGMA·마이그레이션(체크섬)·SQLite 기능 검사 | P1 |
 | `app/storage/repositories.py` | 테이블별 저장·조회. SQL은 이 파일에만 | P2 |
 | `app/parsers` | 파서 프로토콜, 정규식 프로파일 기반 범용 파서, 레지스트리 | P2 |
-| `app/core` | 가져오기·정규화·특징 추출·부분 순서·패턴 후보·근거 ID 존재 검증 | P2~P7 |
-| `app/learning` | 정상·비정상 학습 흐름, 질문 엔진, 승인·개정 | P3~P5 |
-| `app/analysis` | 사례 검색, 이상 탐지, 진단 조립, 결과 모델 | P6~P8 |
-| `app/ai` | Ollama 클라이언트, 모드 추정, 초안 생성, 근거 묶음, 출력 검증 | P1(상태 확인)~P7 |
+| `app/core` | 가져오기·정규화·특징 추출·부분 순서·패턴 후보·근거 ID 존재 검증. 참고 자료 읽기(`reference_reader`: TXT·MD·XLSX·PDF·DOCX → 표·글 덩어리)와 항목 뽑기(`reference_structurer`) | P2~P7, CR-04 |
+| `app/learning` | 정상·비정상 학습 흐름, 질문 엔진, 승인·개정. 로그 입력: 파일 하나 = 사례 하나, 저장 = 승인(`log_entry`). 자유 글 정리를 사례·분석 칸에 반영(`intake`). 참고 자료 올리기·수정·승인·보관(`reference_library`) | P3~P5, CR-04, CR-05, CR-06 |
+| `app/analysis` | 사례 검색, 이상 탐지, 진단 조립, 결과 모델. 로그 코드와 승인된 참고 자료 맞추기(`reference_matcher`) | P6~P8, CR-04 |
+| `app/ai` | Ollama 클라이언트, 모드 추정, 초안 생성, 근거 묶음, 출력 검증. 자유 글 조각 고르기(`intake`, V-10) | P1(상태 확인)~P7, CR-05 |
 | `app/reports` | JSON·HTML(자체 포함) 보고서 | P8 |
 | `app/ui` | 화면. 로직 없음 | P1(틀)~P8 |
 
@@ -223,6 +223,18 @@ def build_response_guidance(similar_abnormal: Sequence[SimilarCase],
 ```
 
 - 변경 요청 CR-01: 대응 매뉴얼은 진단 가이드와 같은 가져오기 경로(`importer`, P4)로 들어오고 `attachment_kind`만 다르다. 신규 분석 화면은 결과 맨 위에 권장 대응을 보여 준다(P8).
+- 변경 요청 CR-05: 자유 글 정리.
+
+```python
+# app/ai/intake.py
+def split_story(text: str) -> list[Segment]                       # 문장·줄 조각 (결정론)
+def pick_fields(client, model, segments, kind, modes) -> IntakePicks   # AI는 조각 키·글자 일부만 고름, V-10으로 거름
+
+# app/learning/intake.py
+class IntakeService:
+    def organize_text(text, kind) -> IntakeResult        # 규칙(제목·모드 이름 일치) + AI 고르기. DB 쓰지 않음(신규 분석)
+    def organize_case(case_id, text) -> IntakeResult     # 글 저장 → 정리 → 찾은 칸만 사례에 반영(모드는 확인 전으로)
+```
 
 ## 5. 실행 모델
 

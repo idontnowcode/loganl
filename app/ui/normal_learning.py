@@ -21,6 +21,7 @@ from app.learning.case_manager import CaseDetail, CaseError
 from app.learning.normal_learner import NormalLearner
 from app.models.enums import OriginPurpose
 from app.ui.case_editor import CaseEditorBase, text_box
+from app.ui.natural_input import SummaryRow
 from app.ui.theme import comfortable_table, fit_widget_column
 
 PATTERN_LABELS = {
@@ -34,8 +35,14 @@ KIND_LABELS = {"FACT": "관측", "HYPOTHESIS": "추정", "UNKNOWN": "불명"}
 class NormalLearningPage(CaseEditorBase):
     case_type = "NORMAL"
     purpose = OriginPurpose.NORMAL_CASE
-    steps_text = ("진행 순서  ① 왼쪽에 정상 로그를 넣고 가져오기 → ② 제목·운전 모드(확인함)·정상 판정 근거 → "
-                  "③ '패턴 후보 만들기' 후 후보마다 승인·거부 → ④ AI 확인 질문에 답하기 → ⑤ '승인'. 입력은 자동 저장됩니다.")
+    steps_text = ("진행 순서  ① 왼쪽에 정상 로그를 넣고 가져오기 → ② 아래 칸에 상황과 정상이라고 본 이유를 편하게 적고 "
+                  "'AI로 정리' → ③ 빠진 것만 질문에 답하기 → ④ '패턴 후보 만들기' 후 후보마다 승인·거부 → ⑤ '승인'. "
+                  "입력은 자동 저장됩니다.")
+    story_placeholder = "예) 어제 오후 ○○ 모드로 돌렸고, 처음부터 끝까지 경고 없이 정상 종료됨. FW 2.3, 기본 구성."
+    mode_required = True
+
+    def specific_summary_rows(self) -> list[SummaryRow]:
+        return [SummaryRow("정상 판정 근거", self.rationale_edit.toPlainText().strip() or None, required=True)]
 
     def build_specific(self, layout: QVBoxLayout) -> None:
         self.rationale_edit = text_box(60, "이 로그를 정상으로 판단한 근거 (승인 필수)")
