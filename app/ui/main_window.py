@@ -38,7 +38,6 @@ from app.ui.knowledge_manager import KnowledgeDialog
 from app.ui.log_analysis import LogAnalysisPage
 from app.ui.log_entry import LogEntryPage
 from app.ui.log_import_panel import LogImportPanel
-from app.ui.mode_dialog import ModeDialog
 from app.ui.reference_manager import ReferenceManagerDialog
 from app.ui.settings_dialog import SettingsDialog
 from app.ui.theme import set_role
@@ -74,14 +73,14 @@ PLANNED_SCREENS: tuple[PlannedScreen, ...] = (
         "CR-06",
         (
             "복수 로그 입력", "로그 미리보기", "이벤트 타임라인", "파일마다 정상/비정상", "동작 메모",
-            "에러로 판단한 근거(비정상)", "저장 = 학습", "저장된 로그 목록", "자세히 편집(패턴·가이드·질문)",
+            "에러로 판단한 근거(비정상)", "저장 = 학습", "저장된 로그 목록", "자세히 편집(가이드·질문)",
         ),
     ),
     PlannedScreen(
         "신규 로그 분석",
         "Phase 6~8",
         (
-            "권장 대응 (결과 맨 위, 승인된 매뉴얼·가이드 근거)", "복수 로그 입력", "운전 모드 확인", "원본 로그 뷰어",
+            "권장 대응 (결과 맨 위, 승인된 매뉴얼·가이드 근거)", "복수 로그 입력", "원본 로그 뷰어",
             "이벤트 타임라인", "오류 및 이상 목록", "정상 사례 비교", "비정상 유사 사례", "AI 원인 가설",
             "증거 및 진단 가이드", "보고서 저장", "학습 사례 등록",
         ),
@@ -93,7 +92,6 @@ AUX_MENU: tuple[tuple[str, str | None], ...] = (
     ("학습 사례 관리", None),
     ("분석 이력", None),
     ("참고 자료 관리", None),
-    ("운전 모드 관리", None),
     ("설정", None),
     ("백업 및 복원", None),
 )
@@ -220,7 +218,6 @@ class MainWindow(QMainWindow):
             manage.addAction(action)
             self.menu_actions[name] = action
         self.menu_actions["설정"].triggered.connect(self.open_settings)
-        self.menu_actions["운전 모드 관리"].triggered.connect(self.open_modes)
         self.menu_actions["참고 자료 관리"].triggered.connect(self.open_references)
         self.menu_actions["학습 사례 관리"].triggered.connect(self.open_case_review)
         self.menu_actions["분석 이력"].triggered.connect(self.open_history)
@@ -351,18 +348,10 @@ class MainWindow(QMainWindow):
         dialog.open()
         return dialog
 
-    # ── 운전 모드 ──
-    def open_modes(self) -> None:
-        ModeDialog(self.context.database, self).exec()
-        self.refresh_mode_lists()
-        self.refresh_hint()
-
-    def refresh_mode_lists(self) -> None:
-        for page in self.case_pages():
-            page.refresh_modes()
-
+    # ── 탭 ── (CR-09: '운전 모드 관리' 메뉴는 없앴다. 모드로 나누지 않는다)
     def case_pages(self) -> list:
-        return [w for w in (self.tabs.widget(i) for i in range(self.tabs.count())) if hasattr(w, "refresh_modes")]
+        """백그라운드 작업(runner)이 있는 탭들. 바쁜지 보거나 끝날 때 기다리는 데 쓴다."""
+        return [w for w in (self.tabs.widget(i) for i in range(self.tabs.count())) if hasattr(w, "runner")]
 
     # ── 설정 ──
     def open_settings(self) -> None:

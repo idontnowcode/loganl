@@ -20,6 +20,15 @@ from app.storage.repositories import CaseRepository, SearchRepository
 
 SIMILAR_THRESHOLD = 0.4
 REFERENCE_LIMIT = 3  # 운전 모드 없이 분석할 때 기준으로 삼을 정상 로그 수 (CR-06 LI-06)
+REFERENCE_POOL = 20  # 정상 로그와 비교하는 통계(CR-08 DT-01~10)에 쓸 비슷한 정상 로그 최대 수
+CONTAINMENT_THRESHOLD = 0.8  # 점수는 낮아도 입력 로그의 이벤트 종류가 거의 다 들어 있는 정상 로그(끊긴 로그의 비교 기준)
+CONTAINMENT_MIN_SCORE = 0.2
+
+
+def comparison_pool(similar_normal: Sequence[SimilarCase]) -> list[SimilarCase]:
+    """정상 로그 대비 비교(CR-08)에 쓸 기준: 점수 0.4 이상, 또는 점수 0.2 이상이면서 입력 로그 이벤트 종류의 80% 이상을 담은 것."""
+    return [s for s in similar_normal if s.similarity >= SIMILAR_THRESHOLD
+            or (s.containment >= CONTAINMENT_THRESHOLD and s.similarity >= CONTAINMENT_MIN_SCORE)]
 
 
 @dataclass
@@ -32,6 +41,7 @@ class SimilarCase:
     shared_types: list[str] = field(default_factory=list)
     shared_codes: list[str] = field(default_factory=list)
     text_hit: bool = False
+    containment: float = 0.0  # 입력 로그의 이벤트 종류 중 이 사례에도 있는 비율(끊긴 로그도 비교 기준을 고르려고, CR-08)
 
     @property
     def relevant(self) -> bool:
@@ -82,7 +92,11 @@ def find_similar(database: Database, input_files: Sequence[FileFeatures], case_t
         if codes:
             with closing(database.connect()) as conn:
                 text_hit = bool(SearchRepository(conn).search(" ".join(codes), [f.log_file_id for f in files], limit=1))
-        results.append(SimilarCase(case, score, types, code_overlap, order, shared_types, shared_codes, text_hit))
+        in_types = set().union(*(f.type_counts for f in input_files)) if input_files else set()
+        case_types = set().union(*(f.type_counts for f in files)) if files else set()
+        containment = len(in_types & case_types) / len(in_types) if in_types else 0.0
+        results.append(SimilarCase(case, score, types, code_overlap, order, shared_types, shared_codes, text_hit,
+                                   round(containment, 4)))
     results.sort(key=lambda s: (s.relevant, s.similarity), reverse=True)
     return results[:limit]
 

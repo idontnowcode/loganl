@@ -1,0 +1,14 @@
+{
+  "name": "epoch_pipe",
+  "description": "범용 예시 프로파일: '유닉스 시간|레벨|구성요소|메시지'(세로줄 구분). 시각은 정수 자릿수로 초(10자리)·밀리초(13자리)·마이크로초(16자리)를 가려 UTC로 읽는다. 세 글자 레벨(INF/WRN/ERR…)은 별칭표로 읽는다. 특정 장비의 형식이 아니다.",
+  "line_regex": "^(?P<ts>\\d{9,16}(?:\\.\\d+)?)\\s*\\|\\s*(?P<level>[A-Za-z]{1,9})\\s*\\|\\s*(?P<component>[^|]*?)\\s*\\|\\s*(?P<message>.*)$",
+  "timestamp": {"kind": "epoch", "unit": "auto"},
+  "level_map": {
+    "TRC": "TRACE", "DBG": "DEBUG", "INF": "INFO", "NTC": "NOTICE", "WRN": "WARN", "ERR": "ERROR", "FTL": "FATAL", "CRT": "CRIT",
+    "T": "TRACE", "D": "DEBUG", "I": "INFO", "W": "WARN", "E": "ERROR", "F": "FATAL"
+  },
+  "continuation": true,
+  "sniff_threshold": 0.6,
+  "code_regex": "(?i)\\b(?:code|err(?:or)?)\\s*[=:]\\s*(?P<code>[A-Za-z0-9_\\-]+)",
+  "event_rules": []
+}

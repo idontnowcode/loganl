@@ -134,8 +134,8 @@ def test_filter_rejects_unregistered_mode_and_unbacked_cause() -> None:
 
 
 # ── 사례 반영 ──
-def test_organize_case_fills_found_fields_and_keeps_mode_unconfirmed(ctx) -> None:
-    mode_id = ModeManager(ctx.database).add("TEST-MODE-A")
+def test_organize_case_fills_found_fields_without_mode(ctx) -> None:
+    ModeManager(ctx.database).add("TEST-MODE-A")  # 예전 데이터에 모드가 있어도 CR-09: 글에서 모드를 찾지 않는다
     cases = CaseManager(ctx.database)
     case_id = cases.create("NORMAL", "", [], fw_version="직접 쓴 값")
     fake = FakeOllama([{"picks": [{"field": "normal_rationale", "text": "끝까지 TEST-E001 없이 끝났음."}],
@@ -146,12 +146,12 @@ def test_organize_case_fills_found_fields_and_keeps_mode_unconfirmed(ctx) -> Non
     assert case.user_description == STORY  # 글은 그대로 저장
     assert case.normal_rationale == "끝까지 TEST-E001 없이 끝났음."
     assert case.fw_version == "직접 쓴 값"  # 못 찾은 칸은 그대로 (NL-06)
-    assert case.mode_id == mode_id and not case.mode_confirmed  # 이름 일치로 찾았어도 확인은 사용자
+    assert case.mode_id is None
     first_line = STORY.splitlines()[0]
     assert case.title == first_line[:40].rstrip() + "…"  # 제목은 글 첫 줄 40자
-    assert "U-0001" in fake.last_prompt() and "TEST-MODE-A" in fake.last_prompt()
+    assert "U-0001" in fake.last_prompt()
     assert "한 글자도 바꾸지 말고" in fake.last_system()
-    assert "정상 판정 근거" in result.message() and "운전 모드" in result.message()
+    assert "정상 판정 근거" in result.message() and "운전 모드" not in result.message()
 
 
 def test_organize_case_without_ai_saves_text_and_rules(ctx) -> None:
@@ -162,7 +162,7 @@ def test_organize_case_without_ai_saves_text_and_rules(ctx) -> None:
     result = IntakeService(ctx.database, settings, FakeOllama().factory).organize_case(case_id, STORY)
     case = cases.get(case_id)
     assert result.status == "RULES_ONLY" and result.ai_status == "NO_MODEL"
-    assert case.user_description == STORY and case.title.startswith("어제 오후") and case.mode_id is not None
+    assert case.user_description == STORY and case.title.startswith("어제 오후") and case.mode_id is None
     assert case.symptom is None
     assert "칸으로 직접 고치기" in result.message()
 
@@ -197,5 +197,5 @@ def test_organize_text_for_analysis_only_conditions(ctx) -> None:
     fake = FakeOllama([{"picks": [{"field": "operating_conditions", "text": "어제 오후"},
                                   {"field": "symptom", "text": "끝까지"}]}])
     result = IntakeService(ctx.database, ctx.settings, fake.factory).organize_text(STORY, "ANALYSIS")
-    assert result.fields == {"operating_conditions": "어제 오후"} and result.mode_name == "TEST-MODE-A"
+    assert result.fields == {"operating_conditions": "어제 오후"} and result.mode_name is None  # CR-09
     assert IntakeService(ctx.database, ctx.settings, fake.factory).organize_text("  ", "ANALYSIS").status == "NO_TEXT"

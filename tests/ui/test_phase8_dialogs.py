@@ -22,12 +22,9 @@ def quiet(settings) -> OllamaStatus:
 
 def run_analysis(qtbot, window: MainWindow, ctx, knowledge, tmp_path: Path) -> None:  # noqa: F811
     page = window.analysis_page
-    page.refresh_modes()
     page.import_panel.set_log_file_ids(load(ctx, [abnormal_log(tmp_path / "bad.log", start_second=70)],
                                             OriginPurpose.ANALYSIS))
-    page.mode_combo.setCurrentIndex(page.mode_combo.findData(knowledge[0]))
-    page.mode_confirm.setChecked(True)
-    page.use_ai.setChecked(False)
+    page.use_ai.setChecked(False)  # CR-09: 운전 모드 없이 분석
     with qtbot.waitSignal(page.analysis_done, timeout=15_000):
         page.start_analysis()
 
@@ -35,7 +32,7 @@ def run_analysis(qtbot, window: MainWindow, ctx, knowledge, tmp_path: Path) -> N
 def test_all_menus_enabled(qtbot, ctx) -> None:  # noqa: F811
     window = MainWindow(ctx, status_checker=quiet)
     qtbot.addWidget(window)
-    for name in ("학습 사례 관리", "분석 이력", "운전 모드 관리", "설정", "백업 및 복원", "승인된 지식 보기"):
+    for name in ("학습 사례 관리", "분석 이력", "설정", "백업 및 복원", "승인된 지식 보기"):
         assert window.menu_actions[name].isEnabled(), name
 
 

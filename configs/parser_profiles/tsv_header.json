@@ -1,0 +1,16 @@
+{
+  "name": "tsv_header",
+  "description": "범용 예시 프로파일: 첫 줄이 칸 이름(Level, Date and Time, Source, Message 등)인 탭 구분 내보내기. 날짜는 월/일/연(미국식) 또는 연-월-일, AM/PM·오전/오후를 읽는다. 들여 쓴 다음 줄은 앞 메시지에 이어 붙인다. 특정 장비의 형식이 아니다.",
+  "line_format": "delimited",
+  "delimiter": "\t",
+  "timestamp": {
+    "kind": "strptime",
+    "formats": ["%m/%d/%Y %H:%M:%S", "%m/%d/%Y %H:%M:%S.%f", "%m/%d/%Y %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"],
+    "ampm": {"AM": "AM", "PM": "PM", "오전": "AM", "오후": "PM"}
+  },
+  "continuation": true,
+  "sniff_threshold": 0.6,
+  "code_regex": "(?i)\\b(?:code|err(?:or)?)\\s*[=:]\\s*(?P<code>[A-Za-z0-9_\\-]+)",
+  "level_map": {"verbose": "DEBUG", "information": "INFO", "warning": "WARN", "critical": "FATAL"},
+  "event_rules": []
+}

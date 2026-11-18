@@ -1,0 +1,11 @@
+{
+  "name": "syslog_bsd",
+  "description": "범용 예시 프로파일: BSD syslog '(<우선순위>)월 일 시:분:초 호스트 구성요소[PID]: 메시지'. 레벨은 우선순위 숫자에서 읽고(없으면 비움), 연도가 없으므로 시각은 파일 첫 줄부터의 경과 시간으로 둔다. 특정 장비의 형식이 아니다.",
+  "line_regex": "^(?:<(?P<level>\\d{1,3})>)?(?P<ts>[A-Za-z]{3}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}:\\d{2})\\s+\\S+\\s+(?P<component>[^\\s\\[:]+)(?:\\[\\d+\\])?:\\s*(?P<message>.*)$",
+  "timestamp": {"kind": "strptime", "formats": ["%b %d %H:%M:%S"], "no_year": true},
+  "level_from": "syslog_pri",
+  "continuation": true,
+  "sniff_threshold": 0.6,
+  "code_regex": "(?i)\\b(?:code|err(?:or)?)\\s*[=:]\\s*(?P<code>[A-Za-z0-9_\\-]+)",
+  "event_rules": []
+}

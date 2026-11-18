@@ -19,6 +19,7 @@ from app.config import AppSettings
 from app.core.cancel import NEVER_CANCEL, CancelToken
 from app.core.feature_extractor import FileFeatures, extract, first_occurrence_order
 from app.core.pattern_analyzer import propose_patterns
+from app.core.reparse import current_parse
 from app.models.enums import AuditAction, Actor
 from app.models.records import EvidenceRef, PatternRecord
 from app.storage.database import Database, transaction
@@ -58,6 +59,7 @@ def case_file_features(database: Database, case_id: int) -> list[FileFeatures]:
         ids = CaseRepository(conn).log_file_ids(case_id)
         records = LogFileRepository(conn).get_many(ids)
         events = EventRepository(conn).for_files(ids)
+    records, events = current_parse(database, records, events)  # 예전 버전이 읽은 로그는 지금 파서로(DT-16)
     return [extract(r, events[r.id]) for r in records]
 
 

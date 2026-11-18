@@ -63,7 +63,7 @@
 | `app/storage/paths.py` | 데이터 폴더 구조(§9)와 생성 | P1 |
 | `app/storage/database.py` | 연결·PRAGMA·마이그레이션(체크섬)·SQLite 기능 검사 | P1 |
 | `app/storage/repositories.py` | 테이블별 저장·조회. SQL은 이 파일에만 | P2 |
-| `app/parsers` | 파서 프로토콜, 정규식 프로파일 기반 범용 파서, 레지스트리 | P2 |
+| `app/parsers` | 파서 프로토콜, 프로파일 기반 범용 파서(줄 형식 regex·json·logfmt·delimited, CR-08), 레지스트리 | P2, CR-08 |
 | `app/core` | 가져오기·정규화·특징 추출·부분 순서·패턴 후보·근거 ID 존재 검증. 참고 자료 읽기(`reference_reader`: TXT·MD·XLSX·PDF·DOCX → 표·글 덩어리)와 항목 뽑기(`reference_structurer`) | P2~P7, CR-04 |
 | `app/learning` | 정상·비정상 학습 흐름, 질문 엔진, 승인·개정. 로그 입력: 파일 하나 = 사례 하나, 저장 = 승인(`log_entry`). 자유 글 정리를 사례·분석 칸에 반영(`intake`). 참고 자료 올리기·수정·승인·보관(`reference_library`) | P3~P5, CR-04, CR-05, CR-06 |
 | `app/analysis` | 사례 검색, 이상 탐지, 진단 조립, 결과 모델. 로그 코드와 승인된 참고 자료 맞추기(`reference_matcher`) | P6~P8, CR-04 |
@@ -210,6 +210,18 @@ def find_similar(query: AnalysisQuery, case_type: CaseType, limit: int = 5) -> l
 
 # app/analysis/anomaly_detector.py (P6)
 def detect(events: Sequence[EventRecord], patterns: Sequence[ApprovedPattern]) -> list[Finding]
+
+# app/analysis/reference_checks.py (CR-08 DT-01~09)
+def compare_with_normals(target: FileFeatures, events: Sequence[EventRecord],
+                         references: Sequence[ReferenceFile]) -> list[Finding]
+    # 점수 0.4 이상 비슷한 승인 정상 로그(최대 5개)와 비교: 누락·횟수 초과·순서·비율·번호별 흐름·
+    # 연속 반복·간격·값 범위·값 멈춤. 모두 SUSPECT(의심), detail.basis = REFERENCE_NORMAL. 장비 사양을 쓰지 않는다.
+
+# app/core/reparse.py (CR-08 DT-16)
+def current_parse(database: Database, records: Sequence[LogFileRecord],
+                  events: Mapping[int, list[EventRecord]]) -> tuple[list[LogFileRecord], dict[int, list[EventRecord]]]
+    # 마이그레이션 0007 적용 전에 가져온 로그만 보관한 원본 사본을 지금 파서로 다시 읽어 돌려준다(메모리에서만, 캐시).
+    # 이벤트 id는 그 줄을 담은 DB 이벤트의 id. DB는 바꾸지 않는다. 사본을 못 읽으면 저장된 이벤트 그대로.
 
 # app/analysis/diagnostic_engine.py (P7)
 def run_analysis(run_id: int, cancel: CancelToken) -> AnalysisResult

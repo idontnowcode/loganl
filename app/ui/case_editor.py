@@ -143,6 +143,7 @@ class CaseEditorBase(QWidget):
         self.form = QFormLayout()
         self.form.addRow("제목", self.title_edit)
         self.form.addRow("운전 모드", mode_holder)
+        self.form.setRowVisible(mode_holder, False)  # CR-09: 모드로 나누지 않는다(칸은 남겨 두고 숨김)
         self.form.addRow("", self.mode_guess_label)
         self.form.setRowVisible(self.mode_guess_label, False)
         self.form.addRow("운전 조건", self.conditions_edit)
@@ -204,7 +205,7 @@ class CaseEditorBase(QWidget):
         manual_layout.setContentsMargins(0, 0, 0, 0)
         manual_layout.addWidget(basics)
         manual_layout.addWidget(notes)
-        self.fields_section = Collapsible("칸으로 직접 고치기 (제목·운전 모드·조건·FW·장비 구성·메모 등)", manual)
+        self.fields_section = Collapsible("칸으로 직접 고치기 (제목·조건·FW·장비 구성·메모 등)", manual)
         self.side.addWidget(self.fields_section)
         self.side.addWidget(QLabel("승인 검사"))
         self.side.addWidget(self.check_label)
@@ -322,12 +323,8 @@ class CaseEditorBase(QWidget):
 
     # ── 자유 글 (CR-05) ──
     def summary_rows(self) -> list[SummaryRow]:
-        mode_id = self.mode_combo.currentData()
-        mode_name = self.mode_combo.currentText() if mode_id is not None else None
-        pending = mode_name is not None and not self.mode_confirm.isChecked()
-        rows = [SummaryRow("운전 모드", mode_name, required=self.mode_required,
-                           pending="확인 전" if pending else None, action=self.mode_ok_button if pending else None)]
-        rows += [SummaryRow("운전 조건", self.conditions_edit.toPlainText().strip() or None),
+        # CR-09: 운전 모드는 보이지 않는다(모드로 나누지 않음)
+        rows = [SummaryRow("운전 조건", self.conditions_edit.toPlainText().strip() or None),
                  SummaryRow("FW 버전", self.fw_edit.text().strip() or None),
                  SummaryRow("장비 구성", self.device_edit.text().strip() or None)]
         return rows + self.specific_summary_rows()

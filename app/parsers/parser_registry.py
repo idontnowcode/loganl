@@ -10,6 +10,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from app.models.records import ParserProfile
+from app.parsers.auto_parser import AutoParser
 from app.parsers.base_parser import LogParser, RawTextParser
 from app.parsers.generic_parser import RegexProfileParser
 
@@ -32,6 +33,8 @@ class ParserRegistry:
         registry = cls()
         if directory.is_dir():
             registry.load_profiles(directory)
+        # CR-08 PA-04: 맞는 프로파일이 없을 때 원문 파서 대신 쓸 자동 형식 인식(점수가 프로파일보다 늘 낮다)
+        registry.register(AutoParser())
         return registry
 
     def register(self, parser: LogParser) -> None:
@@ -67,7 +70,10 @@ class ParserRegistry:
         best: LogParser = self.fallback
         best_score = 0.0
         for name in self.names():
-            score = self._parsers[name].sniff(head_lines)
+            parser = self._parsers[name]
+            score = parser.sniff(head_lines)
+            if getattr(getattr(parser, "profile", None), "catch_all", False):
+                score *= 0.5  # 포괄형(예: ISO 날짜 + 아무 글)은 구조를 더 읽는 자동 인식에 양보한다(CR-08 PA-04)
             if score > best_score:
                 best, best_score = self._parsers[name], score
         return best

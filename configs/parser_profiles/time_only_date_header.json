@@ -1,0 +1,19 @@
+{
+  "name": "time_only_date_header",
+  "description": "범용 예시 프로파일: 줄마다 '[시:분:초(.밀리초)] (한 글자 레벨) (구성요소) 메시지'이고 날짜는 '==== 날짜 2026-11-12 ====' 같은 머리 줄에만 있는 로그. 머리 줄의 날짜를 뒤 줄 시각에 붙여 읽고, 날짜 머리 줄이 나오기 전 시각은 읽지 않는다. 특정 장비의 형식이 아니다.",
+  "line_regex": "^\\[(?P<ts>\\d{1,2}:\\d{2}:\\d{2}(?:[.,]\\d{1,6})?)\\]\\s+(?:(?P<level>[A-Z])\\s+)?(?:(?P<component>[A-Za-z0-9_.\\-/]+)(?:\\s{2,}|:\\s+|\\s+-\\s+))?(?P<message>.*)$",
+  "timestamp": {
+    "kind": "strptime",
+    "formats": [
+      "%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S,%f",
+      "%Y/%m/%d %H:%M:%S.%f", "%Y/%m/%d %H:%M:%S", "%Y.%m.%d %H:%M:%S.%f", "%Y.%m.%d %H:%M:%S"
+    ],
+    "date_line_regex": "^\\W*(?:날짜|일자|date|Date|DATE)?\\W*(?P<date>\\d{4}[-./]\\d{1,2}[-./]\\d{1,2})\\W*$"
+  },
+  "level_map": {"T": "TRACE", "D": "DEBUG", "V": "DEBUG", "I": "INFO", "N": "NOTICE", "W": "WARN", "E": "ERROR", "F": "FATAL"},
+  "catch_all": true,
+  "continuation": true,
+  "sniff_threshold": 0.6,
+  "code_regex": "(?i)\\b(?:code|err(?:or)?)\\s*[=:]\\s*(?P<code>[A-Za-z0-9_\\-]+)",
+  "event_rules": []
+}

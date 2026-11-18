@@ -255,6 +255,8 @@ class LogImporter:
         kinds = {e.ts_kind for e in events if e.ts_kind != EventTimeKind.NONE}
         if not kinds:
             return TimestampBasis.UNKNOWN  # 형식은 맞았지만 시각을 하나도 읽지 못함
+        if declared == TimestampBasis.ABSOLUTE and kinds == {EventTimeKind.RELATIVE}:
+            return TimestampBasis.RELATIVE  # 자동 형식 인식이 연도·날짜 없는 시각을 경과 시간으로 읽은 경우
         if declared == TimestampBasis.ABSOLUTE and EventTimeKind.ABSOLUTE_NO_TZ in kinds:
             return TimestampBasis.ABSOLUTE_NO_TZ
         return declared

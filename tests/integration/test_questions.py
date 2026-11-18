@@ -49,7 +49,8 @@ def normal_case(ctx, tmp_path: Path):
 def test_missing_info_creates_questions(ctx, normal_case) -> None:  # T-QE-01, CR-06 LI-05
     engine = QuestionEngine(ctx.database)
     questions = engine.refresh(normal_case)
-    assert triggers(questions)[:2] == ["MODE_UNKNOWN", "NORMAL_RATIONALE_MISSING"]  # 중요도 순
+    assert triggers(questions)[0] == "NORMAL_RATIONALE_MISSING"  # 중요도 순
+    assert "MODE_UNKNOWN" not in triggers(questions)  # CR-09: 운전 모드는 묻지 않는다
     assert all(q.reason for q in questions)  # 질문 이유
     assert not any(q.required for q in questions)  # CR-06: 정상 사례는 로그만 필수
     assert CaseManager(ctx.database).get(normal_case).status == "DRAFT"
@@ -69,16 +70,13 @@ def test_required_question_blocks_approval(ctx, tmp_path: Path) -> None:  # QE-0
 
 
 def test_answers_update_case_and_reanalyze(ctx, normal_case) -> None:  # T-QE-02·04
-    mode_id = ModeManager(ctx.database).add("테스트모드A")
+    ModeManager(ctx.database).add("테스트모드A")  # 예전 데이터에 모드가 있어도(CR-09) 모드를 묻지 않는다
     engine = QuestionEngine(ctx.database)
     questions = {q.trigger: q for q in engine.refresh(normal_case)}
-    assert (str(mode_id), "테스트모드A") in questions["MODE_UNKNOWN"].choices
-    outcome = engine.answer(questions["MODE_UNKNOWN"].id, "CHOICE", value=str(mode_id))
-    assert "운전 모드" in outcome.applied and outcome.reanalyzed and "패턴 후보" in outcome.reanalyzed[0]
-    case = CaseManager(ctx.database).get(normal_case)
-    assert case.mode_id == mode_id and case.mode_confirmed
-    rationale = next(q for q in engine.open_questions(normal_case) if q.trigger == "NORMAL_RATIONALE_MISSING")
-    engine.answer(rationale.id, "TEXT", text="가상: 사용자가 정상 동작을 직접 봤다")
+    assert "MODE_UNKNOWN" not in questions
+    outcome = engine.answer(questions["NORMAL_RATIONALE_MISSING"].id, "TEXT", text="가상: 사용자가 정상 동작을 직접 봤다")
+    assert outcome.applied
+    assert CaseManager(ctx.database).get(normal_case).normal_rationale == "가상: 사용자가 정상 동작을 직접 봤다"
     assert CaseManager(ctx.database).get(normal_case).status == "DRAFT"  # 필수 질문이 사라지면 정보 필요 해제
     assert ApprovalWorkflow(ctx.database).check(normal_case).ok
 
@@ -128,7 +126,7 @@ def test_abnormal_questions(ctx, tmp_path: Path) -> None:
     engine = QuestionEngine(ctx.database)
     found = {q.trigger: q for q in engine.refresh(case_id)}
     assert not found["GUIDE_INFO_MISSING"].required and not found["CAUSE_STATUS_UNKNOWN"].required  # CR-06: 선택
-    assert not found["MODE_UNKNOWN"].required  # 비정상 사례에서 모드는 필수 아님
+    assert "MODE_UNKNOWN" not in found  # CR-09: 운전 모드는 묻지 않는다
     assert "CRITERIA_DETAIL_UNKNOWN" in found  # 판정 기준에 숫자가 없다
     assert "TEST-E999" in found["USER_LOG_CONFLICT"].text  # 설명의 코드가 로그에 없다
     engine.answer(found["CAUSE_STATUS_UNKNOWN"].id, "CHOICE", value="SUSPECTED")

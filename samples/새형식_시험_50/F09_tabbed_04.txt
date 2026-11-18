@@ -1,0 +1,26 @@
+﻿Level	Date and Time	Source	Message
+Information	11/5/2026 4:05:12 PM	TEST-NOTE	가상 테스트 로그, 실제 장비 형식과 의미 아님
+Information	11/5/2026 4:05:13 PM	TEST-CTRL	TEST-START mode=C lot=TEST-LOT-0044 step=1
+Information	11/5/2026 4:05:14 PM	TEST-CTRL	TEST-INIT value=9
+Verbose	11/5/2026 4:05:14 PM	TEST-SUB	TEST-SELFCHECK error_count=0 warn_count=0
+Information	11/5/2026 4:05:14 PM	TEST-SUB	TEST-READY slot=4
+Information	11/5/2026 4:05:14 PM	TEST-CTRL	TEST-RUN cycle=1 value=44
+    param.cycle = 1
+    param.value = 44
+    param.slot = 4
+Information	11/5/2026 4:05:15 PM	TEST-SUB	TEST-CHECK cycle=1 result=OK error_count=0
+Information	11/5/2026 4:05:15 PM	TEST-CTRL	TEST-RUN cycle=2 value=42
+Information	11/5/2026 4:05:16 PM	TEST-SUB	TEST-CHECK cycle=2 result=OK error_count=0
+Information	11/5/2026 4:05:16 PM	TEST-CTRL	TEST-RUN cycle=3 value=40
+    param.cycle = 3
+    param.value = 40
+    param.slot = 4
+Verbose	11/5/2026 4:05:16 PM	TEST-SUB	TEST-HEARTBEAT seq=2623
+Information	11/5/2026 4:05:17 PM	TEST-SUB	TEST-CHECK cycle=3 result=OK error_count=0
+Information	11/5/2026 4:05:17 PM	TEST-CTRL	TEST-RUN cycle=4 value=40
+Critical	11/5/2026 4:05:17 PM	TEST-SUB	TEST-CRASH cycle=4 code=TEST-E618
+    frame 0: TEST-MOD-A+0x1f40
+    frame 1: TEST-MOD-B+0x0a12
+    frame 2: TEST-MOD-C+0x0003
+    reg r0=0x00000000 r1=0x0000002a
+Information	11/5/2026 4:05:19 PM	TEST-CTRL	TEST-SHUTDOWN reason=crash

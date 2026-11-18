@@ -9,7 +9,6 @@ from collections.abc import Callable
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
-    QComboBox,
     QFormLayout,
     QFrame,
     QGroupBox,
@@ -33,11 +32,10 @@ from app.ai.ollama_client import OllamaClient
 from app.analysis.diagnostic_engine import AnalysisRequest, AnalysisResult, DiagnosticEngine
 from app.bootstrap import AppContext
 from app.core.cancel import CancelToken
-from app.learning.case_manager import ModeManager
 from app.learning.intake import IntakeResult, IntakeService
 from app.learning.normal_learner import default_client_factory
 from app.models.enums import OriginPurpose
-from app.ui.case_editor import set_form_note, text_box
+from app.ui.case_editor import text_box
 from app.ui.log_import_panel import LogImportPanel
 from app.ui.natural_input import Collapsible, StoryBox, SummaryRow
 from app.ui.theme import comfortable_table, fit_list_height, scroll_wrap, set_role
@@ -92,50 +90,28 @@ class LogAnalysisPage(QWidget):
         self.context = context
         self.client_factory = client_factory
         self.runner = TaskRunner(self)
-        self.modes = ModeManager(context.database)
         self.result: AnalysisResult | None = None
         self._cancel: CancelToken | None = None
 
         self.import_panel = LogImportPanel(context, OriginPurpose.ANALYSIS)
 
-        self.mode_combo = QComboBox()
-        self.mode_confirm = QCheckBox("확인함")
-        self.estimate_button = QPushButton("AI로 추정")
-        self.estimate_button.clicked.connect(self.estimate_mode)
-        self.mode_label = QLabel()
-        self.mode_label.setWordWrap(True)
         self.conditions_edit = text_box(40, "운전 조건 (선택)")
-        # CR-05: 상황은 글 한 칸에. 운전 모드·조건 칸은 접어 두고 'AI로 정리'가 글에서 채운다.
+        # CR-05: 상황은 글 한 칸에. 운전 조건 칸은 접어 두고 'AI로 정리'가 글에서 채운다.
+        # CR-09: 운전 모드로 나누지 않는다. 분석은 늘 가장 비슷한 정상 로그와 비교한다.
         self.story = StoryBox(
             "이번 로그 상황을 편하게 적어 주세요 (선택)",
-            "예) ○○ 모드로 돌리던 중 멈췄고 TEST-E001이 화면에 떴음. 어제부터 가끔 그럼.",
-            "적은 글은 AI 원인 가설에 참고로 들어갑니다. 'AI로 정리'를 누르면 운전 모드·조건을 글에서 찾아 채웁니다.")
+            "예) 반복 동작 중 멈췄고 TEST-E001이 화면에 떴음. 어제부터 가끔 그럼.",
+            "적은 글은 AI 원인 가설에 참고로 들어갑니다. 'AI로 정리'를 누르면 운전 조건을 글에서 찾아 채웁니다.")
         self.description_edit = self.story.edit
         self.story.organize_button.clicked.connect(self.organize_story)
-        self.mode_ok_button = QPushButton("이 모드가 맞음")
-        self.mode_ok_button.clicked.connect(lambda: self.mode_confirm.setChecked(True))
-        self.mode_ok_button.hide()
         self.use_ai = QCheckBox("AI 원인 가설도 만들기(로컬 Ollama)")
         self.use_ai.setChecked(True)
-        mode_row = QHBoxLayout()
-        mode_row.addWidget(self.mode_combo, 1)
-        mode_row.addWidget(self.mode_confirm)
-        mode_row.addWidget(self.estimate_button)
-        mode_holder = QWidget()
-        mode_holder.setLayout(mode_row)
-        mode_row.setContentsMargins(0, 0, 0, 0)
         form = QFormLayout()
-        form.addRow("운전 모드", mode_holder)
-        form.addRow("", self.mode_label)
-        form.setRowVisible(self.mode_label, False)
-        self.mode_form = form
         form.addRow("운전 조건", self.conditions_edit)
         manual = QWidget()
         manual.setLayout(form)
         form.setContentsMargins(0, 0, 0, 0)
-        self.fields_section = Collapsible("칸으로 직접 고치기 (운전 모드·운전 조건)", manual)
-        self.mode_combo.currentIndexChanged.connect(lambda _i: self.refresh_summary())
-        self.mode_confirm.toggled.connect(lambda _c: self.refresh_summary())
+        self.fields_section = Collapsible("칸으로 직접 고치기 (운전 조건)", manual)
         self.conditions_edit.textChanged.connect(self.refresh_summary)
 
         self.run_button = QPushButton("분석 실행")
@@ -292,19 +268,11 @@ class LogAnalysisPage(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.addWidget(split)
-        self.refresh_modes()
         self.refresh_summary()
 
     # ── 자유 글 (CR-05) ──
     def refresh_summary(self) -> None:
-        mode_id = self.mode_combo.currentData()
-        mode_name = self.mode_combo.currentText() if mode_id is not None else None
-        pending = mode_name is not None and not self.mode_confirm.isChecked()
-        self.story.set_summary([
-            SummaryRow("운전 모드", mode_name, pending="확인 전" if pending else None,
-                       action=self.mode_ok_button if pending else None),
-            SummaryRow("운전 조건", self.conditions_edit.toPlainText().strip() or None),
-        ])
+        self.story.set_summary([SummaryRow("운전 조건", self.conditions_edit.toPlainText().strip() or None)])
 
     def organize_story(self) -> None:
         text = self.story.text()
@@ -316,16 +284,12 @@ class LogAnalysisPage(QWidget):
         service = IntakeService(self.context.database, self.context.settings,
                                 self.client_factory or default_client_factory(self.context.settings))
         self.story.organize_button.setEnabled(False)
-        self.story.result_label.setText("AI가 내 글에서 운전 모드·조건을 찾는 중…")
+        self.story.result_label.setText("AI가 내 글에서 운전 조건을 찾는 중…")
         self.runner.start(service.organize_text, text, "ANALYSIS", on_done=self._on_organized,
                           on_error=self._on_organize_error)
 
     def _on_organized(self, result: IntakeResult) -> None:
         self.story.organize_button.setEnabled(True)
-        if result.mode_id is not None and result.mode_id != self.mode_combo.currentData():
-            self.refresh_modes()
-            self.mode_combo.setCurrentIndex(max(self.mode_combo.findData(result.mode_id), 0))
-            self.mode_confirm.setChecked(False)  # 사용자가 확인한다
         if "operating_conditions" in result.fields:
             self.conditions_edit.setPlainText(result.fields["operating_conditions"])
         self.refresh_summary()
@@ -341,45 +305,14 @@ class LogAnalysisPage(QWidget):
     def _engine(self) -> DiagnosticEngine:
         return DiagnosticEngine(self.context.database, self.context.paths, self.context.settings, self.client_factory)
 
-    def refresh_modes(self) -> None:
-        current = self.mode_combo.currentData()
-        self.mode_combo.clear()
-        self.mode_combo.addItem("(모름)", None)
-        for mode in self.modes.list(active_only=True):
-            self.mode_combo.addItem(mode.name, mode.id)
-        index = self.mode_combo.findData(current)
-        self.mode_combo.setCurrentIndex(max(index, 0))
-
     def build_request(self) -> AnalysisRequest:
-        mode_id = self.mode_combo.currentData()
+        # CR-09: 운전 모드 없이 분석한다(가장 비슷한 승인 정상 로그와 비교)
         return AnalysisRequest(
-            log_file_ids=self.import_panel.log_file_ids(), mode_id=mode_id,
-            mode_confirmed=bool(mode_id is not None and self.mode_confirm.isChecked()),
+            log_file_ids=self.import_panel.log_file_ids(),
             operating_conditions=self.conditions_edit.toPlainText().strip() or None,
             user_description=self.description_edit.toPlainText().strip() or None,
             use_ai=self.use_ai.isChecked(),
         )
-
-    # ── 모드 추정 ──
-    def estimate_mode(self) -> None:
-        ids = self.import_panel.log_file_ids()
-        if not ids or self.runner.busy:
-            set_form_note(self.mode_form, self.mode_label, "로그를 먼저 올리세요.")
-            return
-        self.estimate_button.setEnabled(False)
-        set_form_note(self.mode_form, self.mode_label, "AI가 운전 모드를 추정하는 중…")
-        self.runner.start(self._engine().estimate_mode, ids, on_done=self._on_mode, on_error=self._on_mode_error)
-
-    def _on_mode(self, guess) -> None:
-        self.estimate_button.setEnabled(True)
-        set_form_note(self.mode_form, self.mode_label, guess.message())
-        if guess.mode_id is not None:
-            self.mode_combo.setCurrentIndex(max(self.mode_combo.findData(guess.mode_id), 0))
-            self.mode_confirm.setChecked(False)
-
-    def _on_mode_error(self, message: str) -> None:
-        self.estimate_button.setEnabled(True)
-        set_form_note(self.mode_form, self.mode_label, f"AI 추정 실패: {message}")
 
     # ── 분석 ──
     def start_analysis(self) -> None:

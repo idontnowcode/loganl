@@ -36,10 +36,9 @@ class NormalLearningPage(CaseEditorBase):
     case_type = "NORMAL"
     purpose = OriginPurpose.NORMAL_CASE
     steps_text = ("진행 순서  ① 왼쪽에 정상 로그를 넣고 가져오기 → ② 아래 칸에 상황과 정상이라고 본 이유를 편하게 적고 "
-                  "'AI로 정리' → ③ 빠진 것만 질문에 답하기 → ④ '패턴 후보 만들기' 후 후보마다 승인·거부 → ⑤ '승인'. "
-                  "입력은 자동 저장됩니다.")
-    story_placeholder = "예) 어제 오후 ○○ 모드로 돌렸고, 처음부터 끝까지 경고 없이 정상 종료됨. FW 2.3, 기본 구성."
-    mode_required = True
+                  "'AI로 정리' → ③ 빠진 것만 질문에 답하기 → ④ '승인'. 입력은 자동 저장됩니다.")
+    story_placeholder = "예) 어제 오후 반복 동작을 돌렸고, 처음부터 끝까지 경고 없이 정상 종료됨. FW 2.3, 기본 구성."
+    mode_required = False  # CR-09: 운전 모드로 나누지 않는다
 
     def specific_summary_rows(self) -> list[SummaryRow]:
         return [SummaryRow("정상 판정 근거", self.rationale_edit.toPlainText().strip() or None, required=True)]
@@ -68,6 +67,9 @@ class NormalLearningPage(CaseEditorBase):
         self.pattern_table.setMinimumHeight(180)
         inner.addWidget(self.pattern_table)
         layout.addWidget(box)
+        # CR-09: 정상 패턴은 운전 모드에 묶여 있어(모드 없이 분석하면 쓰이지 않음) 숨긴다. 'AI 초안 만들기'는 아래 칸으로 옮긴다.
+        box.hide()
+        self.pattern_box = box
 
         draft_box = QGroupBox("AI 학습 초안 (제안 · 승인 전에는 확정 지식 아님)")
         draft_layout = QVBoxLayout(draft_box)
@@ -75,6 +77,10 @@ class NormalLearningPage(CaseEditorBase):
         self.draft_view.setReadOnly(True)
         self.draft_view.setMinimumHeight(110)
         self.draft_status = QLabel()
+        draft_row = QHBoxLayout()
+        draft_row.addWidget(self.draft_button)
+        draft_row.addStretch(1)
+        draft_layout.addLayout(draft_row)
         draft_layout.addWidget(self.draft_status)
         draft_layout.addWidget(self.draft_view)
         layout.addWidget(draft_box)

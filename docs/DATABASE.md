@@ -247,12 +247,18 @@ audit_history (모든 엔터티의 승인·수정·삭제 기록, 추가 전용)
 - 분석 결과의 참고 자료 일치는 `analysis_evidence.finding_type = 'TEXT_MATCH'`(이미 있던 값)에 `detail_json.role = 'REFERENCE_MATCH'`로 저장한다. 종류 제약을 바꾸려면 테이블을 다시 만들어야 해서 AI 대응 순서와 같은 방식을 쓴다.
 
 | 0006_questions_passages | `ai_questions`, `reference_passages`(+승인 뷰·잠금 트리거), `cases`의 '승인된 비정상은 증상·판정 기준 필수' CHECK 제거 | CR-07 |
+| 0007_value_out_of_range | `analysis_evidence.finding_type` 허용 값에 `VALUE_OUT_OF_RANGE`·`VALUE_STUCK` 추가, 근거 종류 색인 | CR-08 |
 
 ### 0006 LLM 질문·관련 문서 문단 (CR-07)
 
 - `ai_questions`: 사례(로그 하나)마다 LLM 질문. `kind` ∈ GUESS·ASK, `evidence_json`(근거 키·종류·행·글), `status` ∈ OPEN·ANSWERED·SKIPPED·OBSOLETE, `answer` ∈ YES·NO·UNKNOWN·TEXT, `answer_text`, `dedup_key`(같은 사례에서 유일). 뷰 `confirmed_ai_answers`: 승인된 사례의 답(맞음·틀림·글)만.
 - `reference_passages`: 참고 자료 문서의 문단(코드 항목으로 뽑히지 않은 글). 승인·보관된 문서의 문단은 넣기·고치기·지우기 막힘. 뷰 `approved_reference_passages`.
 - `cases`: 0001의 CHECK 하나를 SQLite 공식 절차(`PRAGMA writable_schema`)로 CREATE TABLE 문에서 뺀다. 표를 다시 만들지 않는다(외래 키 연쇄 삭제 방지). 같은 스크립트의 CREATE TABLE이 스키마 번호를 올려 모든 연결이 새 정의를 읽는다. 0001 파일은 그대로다(체크섬).
+
+### 0007 정상 로그 대비 값 근거 (CR-08)
+
+- `analysis_evidence.finding_type`: 0006과 같은 절차(`PRAGMA writable_schema`)로 CREATE TABLE 문의 허용 값 목록에 `VALUE_OUT_OF_RANGE`(비슷한 정상 로그의 관찰 범위를 크게 벗어난 값)와 `VALUE_STUCK`(늘 변하던 값이 연속으로 같음)을 더한다. 허용 값을 늘리기만 하므로 기존 행은 그대로 맞는다. 같은 스크립트의 `CREATE INDEX`가 스키마 번호를 올린다.
+- 정상 로그 대비 다른 판단(누락·횟수·순서·비율·번호별 흐름·연속 반복·간격)은 기존 값(`MISSING_EVENT`·`REPETITION`·`ORDER_VIOLATION`·`LATENCY`)을 쓰고 `detail_json.basis = 'REFERENCE_NORMAL'`(+`kind`)로 구분한다. 심각도는 늘 의심(SUSPECT)이다.
 
 ### 결정·관례 (Phase 3~7)
 

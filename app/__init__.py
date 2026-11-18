@@ -5,4 +5,4 @@
 
 APP_NAME = "Local Log Analyzer"
 APP_DIR_NAME = "LocalLogAnalyzer"
-__version__ = "0.3.0"
+__version__ = "0.4.0"

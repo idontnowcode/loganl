@@ -68,7 +68,7 @@ def test_normal_needs_only_logs(setup, ctx, tmp_path) -> None:  # CR-06 LI-05
     workflow = ApprovalWorkflow(ctx.database)
     check = workflow.check(case_id)
     assert check.ok  # 운전 모드·정상 판정 근거는 선택
-    assert any("운전 모드가 없습니다" in w for w in check.warnings)
+    assert not any("운전 모드" in w for w in check.warnings)  # CR-09: 모드로 나누지 않으므로 모드 경고도 없다
     assert workflow.request_review(case_id).ok
     assert cases.get(case_id).status == "READY_FOR_REVIEW"
     empty = cases.create("NORMAL", "로그 없음", [])

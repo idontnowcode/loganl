@@ -42,14 +42,15 @@ def test_story_box_is_first_and_fields_are_folded(qtbot, ctx) -> None:
     assert page.fields_section.content.isHidden()  # 칸 양식은 접혀 있다
     assert not page.fields_section.is_expanded()
     lines = page.story.summary_texts()
-    assert f"운전 모드: {MISSING_TEXT}" in lines and f"정상 판정 근거: {MISSING_TEXT}" in lines
+    assert f"정상 판정 근거: {MISSING_TEXT}" in lines
+    assert not any(line.startswith("운전 모드") for line in lines)  # CR-09: 운전 모드는 보이지 않는다
     assert not any(line.startswith("FW 버전") for line in lines)  # 빈 선택 칸은 안 보인다
     page.fields_section.toggle.click()
     assert page.fields_section.is_expanded() and not page.fields_section.content.isHidden()
 
 
-def test_organize_fills_fields_and_mode_needs_one_click(qtbot, ctx) -> None:
-    mode_id = ModeManager(ctx.database).add("TEST-MODE-A")
+def test_organize_fills_fields_without_mode(qtbot, ctx) -> None:
+    ModeManager(ctx.database).add("TEST-MODE-A")  # 예전 데이터에 모드가 있어도 CR-09: 모드는 채우지 않는다
     fake = FakeOllama([{"picks": [{"field": "normal_rationale", "text": "끝까지 TEST-E001 없이 끝났음."},
                                   {"field": "fw_version", "text": "2.3"}],
                         "mode": "UNKNOWN", "mode_text": "", "cause_status": "NOT_SAID", "cause_text": ""}])
@@ -60,16 +61,12 @@ def test_organize_fills_fields_and_mode_needs_one_click(qtbot, ctx) -> None:
     qtbot.waitUntil(lambda: page.story.organize_button.isEnabled(), timeout=5000)
     case = CaseManager(ctx.database).get(page.case_id)
     assert case.user_description == STORY and case.normal_rationale == "끝까지 TEST-E001 없이 끝났음."
-    assert case.fw_version == "2.3" and case.mode_id == mode_id and not case.mode_confirmed
+    assert case.fw_version == "2.3" and case.mode_id is None
     assert case.title.startswith("어제 오후")
     assert "내 글에서 옮겼습니다" in page.story.result_label.text()
     lines = page.story.summary_texts()
-    assert "운전 모드: TEST-MODE-A" in lines and "FW 버전: 2.3" in lines
-    assert page.mode_ok_button.isVisibleTo(page)
-    page.mode_ok_button.click()
-    assert CaseManager(ctx.database).get(page.case_id).mode_confirmed
-    assert not page.mode_ok_button.isVisibleTo(page)
-    assert "운전 모드" not in page.check_label.text()  # 승인 검사에서 모드 막힘이 풀렸다
+    assert "FW 버전: 2.3" in lines and not any(line.startswith("운전 모드") for line in lines)
+    assert "운전 모드" not in page.check_label.text()
 
 
 def test_without_ai_text_is_kept_and_fields_open(qtbot, ctx) -> None:
@@ -137,8 +134,8 @@ def test_abnormal_organize_sets_symptom_and_cause(qtbot, ctx) -> None:
     assert "오류 증상: TEST-E001이 뜨고 멈춤." in lines and "원인 확정 여부: 원인 모름" in lines
 
 
-def test_analysis_story_fills_mode_and_conditions(qtbot, ctx) -> None:
-    mode_id = ModeManager(ctx.database).add("TEST-MODE-A")
+def test_analysis_story_fills_conditions_only(qtbot, ctx) -> None:
+    ModeManager(ctx.database).add("TEST-MODE-A")  # CR-09: 모드는 채우지 않는다
     fake = FakeOllama([{"picks": [{"field": "operating_conditions", "text": "어제 오후"}]}])
     page = LogAnalysisPage(ctx, client_factory=fake.factory)
     qtbot.addWidget(page)
@@ -146,10 +143,8 @@ def test_analysis_story_fills_mode_and_conditions(qtbot, ctx) -> None:
     page.description_edit.setPlainText(STORY)
     page.organize_story()
     qtbot.waitUntil(lambda: page.story.organize_button.isEnabled(), timeout=5000)
-    assert page.mode_combo.currentData() == mode_id and not page.mode_confirm.isChecked()
     assert page.conditions_edit.toPlainText() == "어제 오후"
-    assert "운전 모드: TEST-MODE-A" in page.story.summary_texts()
-    page.mode_ok_button.click()
+    assert not any(line.startswith("운전 모드") for line in page.story.summary_texts())
     request = page.build_request()
-    assert request.mode_confirmed and request.user_description == STORY
+    assert request.mode_id is None and request.user_description == STORY
     assert request.operating_conditions == "어제 오후"

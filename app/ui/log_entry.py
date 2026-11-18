@@ -135,7 +135,7 @@ class LogEntryPage(QWidget):
         set_role(self.save_button, variant="primary")
         self.save_button.clicked.connect(self.save_selected)
         self.detail_button = QPushButton("자세히 편집…")
-        self.detail_button.setToolTip("패턴 확정, 진단 가이드 첨부, 운전 모드, 확인 질문 등 예전 학습 화면")
+        self.detail_button.setToolTip("진단 가이드·대응 매뉴얼 첨부, 확인 질문, AI 학습 초안 등 예전 학습 화면")
         self.detail_button.clicked.connect(self.open_selected_detail)
         buttons = QHBoxLayout()
         buttons.addWidget(self.save_button)

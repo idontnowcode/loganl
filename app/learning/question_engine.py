@@ -91,11 +91,7 @@ class QuestionEngine:
         events = EventRepository(conn)
         out: list[QuestionCandidate] = []
 
-        if case.mode_id is None or not case.mode_confirmed:
-            out.append(QuestionCandidate(
-                "MODE_UNKNOWN", "이 로그를 수집할 때 장비의 운전 모드는 무엇이었나요?",
-                "운전 모드가 있으면 같은 모드끼리 비교하고 패턴을 확정할 수 있습니다(선택, CR-06).",
-                90, False, "mode"))
+        # CR-09: 운전 모드로 나누지 않으므로 모드를 묻지 않는다(MODE_UNKNOWN 질문은 만들지 않음)
         if normal and not (case.normal_rationale or "").strip():
             out.append(QuestionCandidate(
                 "NORMAL_RATIONALE_MISSING", "이 로그를 정상으로 판단한 근거는 무엇인가요?",

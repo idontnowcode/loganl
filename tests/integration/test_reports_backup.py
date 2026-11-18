@@ -57,7 +57,7 @@ def test_saved_reports_and_html_safety(ctx, knowledge, tmp_path: Path) -> None: 
 
 def test_backup_and_restore_round_trip(ctx, knowledge, tmp_path: Path) -> None:  # noqa: F811
     info = create_backup(ctx.paths, ctx.database, __version__)
-    assert info.path.exists() and info.schema_version == 6
+    assert info.path.exists() and info.schema_version == 7
     manifest = inspect_backup(info.path)
     assert "database/knowledge.db" in manifest["files"] and any(n.startswith("cases/") for n in manifest["files"])
 
@@ -70,7 +70,7 @@ def test_backup_and_restore_round_trip(ctx, knowledge, tmp_path: Path) -> None: 
     assert aside and (aside[0] / "cases").exists()  # 지우지 않고 옮겼다
     originals = [p for p in ctx.paths.cases_normal.rglob("*") if p.is_file()]
     assert originals and all(not os.access(p, os.W_OK) for p in originals)  # 원본 사본은 다시 읽기 전용
-    assert inspect_backup(safety)["schema_version"] == 6  # 복원 직전 상태도 복원 가능한 백업
+    assert inspect_backup(safety)["schema_version"] == 7  # 복원 직전 상태도 복원 가능한 백업
 
 
 def test_tampered_or_foreign_backup_is_refused(ctx, knowledge, tmp_path: Path) -> None:  # noqa: F811

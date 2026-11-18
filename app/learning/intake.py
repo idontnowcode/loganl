@@ -16,7 +16,7 @@ from app.ai.intake import KIND_FIELDS, pick_fields, split_story
 from app.ai.ollama_client import OllamaClient
 from app.config import AppSettings
 from app.core.cancel import NEVER_CANCEL, CancelToken
-from app.learning.case_manager import CaseError, CaseManager, ModeManager
+from app.learning.case_manager import CaseError, CaseManager
 from app.models.records import ModeRecord
 from app.storage.database import Database
 
@@ -127,7 +127,7 @@ class IntakeService:
         text = text.strip()
         if not text:
             return IntakeResult("NO_TEXT")
-        modes = ModeManager(self.database).list(active_only=True)
+        modes = []  # CR-09: 운전 모드로 나누지 않으므로 글에서 모드를 찾지 않는다
         result = IntakeResult("OK", title=title_from_story(text))
         by_name = match_mode_name(text, modes)
         if by_name is not None:

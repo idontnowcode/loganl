@@ -6,7 +6,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.enums import EventTimeKind, OriginPurpose, TimestampBasis
 
@@ -40,11 +40,27 @@ class ParsedEvent(_Record):
 
 
 class TimestampSpec(_Record):
-    """iso: ISO-8601 비슷한 절대시각 / strptime: formats 목록 / relative: 기준 없는 경과 시간."""
+    """iso: ISO-8601 비슷한 절대시각 / strptime: formats 목록 / relative: 기준 없는 경과 시간 /
+    epoch: 유닉스 시간(unit 단위, UTC).
 
-    kind: str = Field(pattern="^(iso|strptime|relative)$")
+    strptime 보조(CR-08 PA-01): ampm은 '오전'·'PM' 같은 낱말 → AM/PM(낱말을 떼고 12시간제를 바꿈, 로캘과 무관),
+    no_year는 연도 없는 시각(지어낸 연도를 붙이지 않고 파일 첫 시각부터의 경과로 둠),
+    date_line_regex는 (?P<date>...) 날짜 머리 줄(뒤따르는 시각에 그 날짜를 붙여 읽음).
+    """
+
+    kind: str = Field(pattern="^(iso|strptime|relative|epoch)$")
     formats: list[str] = Field(default_factory=list)
-    unit: str = Field(default="s", pattern="^(s|ms|us)$")
+    unit: str = Field(default="s", pattern="^(s|ms|us|auto)$")  # auto(epoch만): 정수 자릿수로 초·밀리초·마이크로초
+    ampm: dict[str, str] = Field(default_factory=dict)
+    no_year: bool = False
+    date_line_regex: str | None = None
+
+    @field_validator("ampm")
+    @classmethod
+    def _ampm_values(cls, value: dict[str, str]) -> dict[str, str]:
+        if any(v.upper() not in ("AM", "PM") for v in value.values()):
+            raise ValueError("ampm 값은 AM 또는 PM이어야 합니다")
+        return {k: v.upper() for k, v in value.items()}
 
 
 class EventRule(_Record):
@@ -54,22 +70,44 @@ class EventRule(_Record):
     regex: str
 
 
+class FieldAliases(_Record):
+    """구조형 줄(json·logfmt·delimited)에서 각 칸으로 읽을 이름들. 대소문자는 가리지 않는다."""
+
+    ts: list[str] = Field(default_factory=lambda: ["ts", "time", "timestamp", "@timestamp", "datetime",
+                                                   "date and time", "date", "t", "when"])
+    level: list[str] = Field(default_factory=lambda: ["level", "lvl", "severity", "loglevel", "sev", "priority"])
+    component: list[str] = Field(default_factory=lambda: ["component", "comp", "module", "logger", "source",
+                                                          "service", "src", "unit"])
+    message: list[str] = Field(default_factory=lambda: ["msg", "message", "text", "what", "event"])
+    code: list[str] = Field(default_factory=lambda: ["code", "error_code", "err_code"])
+
+
 class ParserProfile(_Record):
+    """line_format(CR-08 PA-01): regex(line_regex의 이름 그룹) · json(한 줄에 JSON 객체 하나) ·
+    logfmt(key=value) · delimited(머리 줄이 있는 CSV·탭). 구조형에서 line_regex는 비워도 되고, 적으면 먼저 거르는 데 쓴다.
+    level_map은 레벨 별칭표(대소문자 무시, 예: I → INFO), level_from=syslog_pri는 '<14>' 우선순위에서 레벨을 읽는다.
+    regex의 rest 그룹은 메시지 뒤에 붙인다(따옴표 안 메시지 + 뒤따르는 key=value 같은 경우)."""
+
     name: str = Field(pattern=r"^[A-Za-z0-9_\-]+$")
     description: str = ""
-    line_regex: str
+    line_format: str = Field(default="regex", pattern="^(regex|json|logfmt|delimited)$")
+    line_regex: str = ""
     timestamp: TimestampSpec | None = None
     continuation: bool = True
     sniff_threshold: float = Field(default=0.6, gt=0, le=1)
     code_regex: str | None = None
     event_rules: list[EventRule] = Field(default_factory=list)
+    fields: FieldAliases = Field(default_factory=FieldAliases)
+    delimiter: str = Field(default=",", min_length=1, max_length=1)
+    level_map: dict[str, str] = Field(default_factory=dict)
+    level_from: str | None = Field(default=None, pattern="^syslog_pri$")
+    catch_all: bool = False  # 무엇이든 받는 포괄형(점수 절반으로 겨룸, CR-08 PA-04)
 
-    @field_validator("line_regex")
-    @classmethod
-    def _needs_message_group(cls, value: str) -> str:
-        if "(?P<message>" not in value:
+    @model_validator(mode="after")
+    def _needs_message_group(self) -> "ParserProfile":
+        if self.line_format == "regex" and "(?P<message>" not in self.line_regex:
             raise ValueError("line_regex에는 (?P<message>...) 그룹이 있어야 합니다")
-        return value
+        return self
 
 
 # ── 가져오기 ──

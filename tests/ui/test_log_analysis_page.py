@@ -12,23 +12,36 @@ from tests.integration.test_analysis import ctx, knowledge, load  # noqa: F401 (
 from tests.logdata import abnormal_log
 
 
+def keys_without_mode(ctx, tmp_path: Path) -> dict[str, str]:  # noqa: F811
+    """화면과 같은 입력(운전 모드 없음)으로 결정론만 한 번 돌려 근거 키를 얻는다(같은 입력이면 같은 키)."""
+    from app.analysis.diagnostic_engine import AnalysisRequest, DiagnosticEngine
+    from tests.integration.test_diagnosis import key_of
+
+    ids = load(ctx, [abnormal_log(tmp_path / "bad.log", start_second=70)], OriginPurpose.ANALYSIS)
+    result = DiagnosticEngine(ctx.database, ctx.paths, ctx.settings).run(AnalysisRequest(ids, use_ai=False))
+    return {
+        "error": key_of(result, "EXPLICIT_ERROR"),
+        "missing": key_of(result, "SIMILAR_NORMAL_CASE"),  # 반대 근거 자리(모드 없이는 승인 패턴 누락이 없다)
+        "case": key_of(result, "SIMILAR_ABNORMAL_CASE"),
+        "cause": key_of(result, "GUIDE_REFERENCE", lambda f: f.detail.get("section") == "CAUSE"),
+        "step": key_of(result, "RESPONSE_REFERENCE", lambda f: f.detail.get("section") == "RESPONSE_STEP"),
+    }
+
+
 def test_analysis_page_shows_response_first(qtbot, ctx, knowledge, tmp_path: Path) -> None:  # noqa: F811
-    mode_id, _, abnormal = knowledge
+    _mode_id, _, abnormal = knowledge
     page = LogAnalysisPage(ctx)
     qtbot.addWidget(page)
-    page.refresh_modes()
     page.import_panel.set_log_file_ids(load(ctx, [abnormal_log(tmp_path / "bad.log", start_second=60)],
                                             OriginPurpose.ANALYSIS))
-    page.mode_combo.setCurrentIndex(page.mode_combo.findData(mode_id))
-    page.mode_confirm.setChecked(True)
-    page.use_ai.setChecked(False)
+    page.use_ai.setChecked(False)  # CR-09: 운전 모드 없이 분석
     with qtbot.waitSignal(page.analysis_done, timeout=15_000):
         page.start_analysis()
     assert page.guidance_box.title() == "권장 대응 — 승인된 대응 매뉴얼 근거"
     first = page.guidance_list.item(0).text()
     assert first.startswith("[주의]") and f"C-{abnormal:04d}" in first
     assert any(page.guidance_list.item(i).text().startswith("[1. 절차] 가상 장비를") for i in range(page.guidance_list.count()))
-    assert "승인된 규칙 위반" in page.axes_label.text() and "유사 사례 있음" in page.axes_label.text()
+    assert "비정상 의심" in page.axes_label.text() and "유사 사례 있음" in page.axes_label.text()
     assert page.findings_table.rowCount() == len(page.result.findings)
 
     row = next(i for i, f in enumerate(page.result.findings) if f.finding_type == "EXPLICIT_ERROR")
@@ -39,11 +52,11 @@ def test_analysis_page_shows_response_first(qtbot, ctx, knowledge, tmp_path: Pat
 
 def test_ai_section_shows_hypotheses_and_labels(qtbot, ctx, knowledge, tmp_path: Path) -> None:  # noqa: F811
     from tests.fake_ollama import FakeOllama
-    from tests.integration.test_diagnosis import good_answer, keys_for
+    from tests.integration.test_diagnosis import good_answer
 
     ctx.settings = ctx.settings.model_copy(
         update={"ollama": ctx.settings.ollama.model_copy(update={"model": "test-model:7b"})})
-    keys = keys_for(ctx, knowledge, tmp_path / "probe")
+    keys = keys_without_mode(ctx, tmp_path / "probe")
     answer = good_answer(keys)
     answer["hypotheses"][0]["likelihood"] = 40  # CR-07 AO-01: 가능성(AI 추정치)
     answer.update(abnormal_likelihood=75, likelihood_reason="가상 이유", likelihood_evidence=[keys["error"]])
@@ -52,8 +65,6 @@ def test_ai_section_shows_hypotheses_and_labels(qtbot, ctx, knowledge, tmp_path:
     qtbot.addWidget(page)
     page.import_panel.set_log_file_ids(load(ctx, [abnormal_log(tmp_path / "bad.log", start_second=70)],
                                             OriginPurpose.ANALYSIS))
-    page.mode_combo.setCurrentIndex(page.mode_combo.findData(knowledge[0]))
-    page.mode_confirm.setChecked(True)
     with qtbot.waitSignal(page.analysis_done, timeout=15_000):
         page.start_analysis()
     text = page.ai_view.toPlainText()

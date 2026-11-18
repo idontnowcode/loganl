@@ -35,29 +35,21 @@ def log_ids(ctx, tmp_path: Path) -> list[int]:
 
 
 def test_register_approve_and_reload(qtbot, ctx, log_ids) -> None:
-    mode_id = ModeManager(ctx.database).add("테스트모드A")
     page = NormalLearningPage(ctx)
     qtbot.addWidget(page)
     page.import_panel.set_log_file_ids(log_ids)
     page.title_edit.setText("화면에서 만든 정상 사례")
     page.save()
     assert page.case_id is not None
-    assert "운전 모드" in page.check_label.text()
+    assert "운전 모드" not in page.check_label.text()  # CR-09: 모드는 묻지도 경고하지도 않는다
+    assert page.pattern_box.isHidden()  # 모드에 묶인 패턴 칸은 숨김
 
-    page.mode_combo.setCurrentIndex(page.mode_combo.findData(mode_id))
-    page.mode_confirm.setChecked(True)
     page.rationale_edit.setPlainText("사용자가 정상 동작을 확인함")
     page.note_edit.setText("화면 메모")
     page.add_note()
-    page.propose_patterns()
-    assert page.pattern_table.rowCount() > 0
-    page.set_all_decisions("APPROVED", {"REQUIRED", "ORDER_CONSTRAINT"})
-    page.set_all_decisions("REJECTED", {"OPTIONAL", "REPEATED", "INDEPENDENT", "UNCLASSIFIED"})
     page.approve()
     assert "승인했습니다" in page.message_label.text()
     assert page.status_label.text().startswith("승인됨")
-    statuses = {(p.pattern_type, p.status) for p in page.detail.patterns}
-    assert statuses == {("REQUIRED", "APPROVED"), ("ORDER_CONSTRAINT", "APPROVED")}  # 화면에서 고른 결정이 반영됨
     assert not page.save_button.isEnabled() and page.reopen_button.isEnabled()
 
     reopened = NormalLearningPage(ctx)  # 다시 열어도 그대로 (재조회)

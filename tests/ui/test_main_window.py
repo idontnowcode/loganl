@@ -77,7 +77,7 @@ def test_detail_editor_opens_old_learning_page(qtbot, context) -> None:  # CR-06
 def test_aux_menu_has_five_items_and_only_settings_enabled(qtbot, context) -> None:
     window = make_window(qtbot, context)
     names = [name for name, _ in AUX_MENU]
-    assert names == ["학습 사례 관리", "분석 이력", "참고 자료 관리", "운전 모드 관리", "설정", "백업 및 복원"]  # CR-04
+    assert names == ["학습 사례 관리", "분석 이력", "참고 자료 관리", "설정", "백업 및 복원"]  # CR-04, CR-09(운전 모드 관리 없앰)
     for name, phase in AUX_MENU:
         action = window.menu_actions[name]
         assert action.text().startswith(name)
@@ -87,7 +87,7 @@ def test_aux_menu_has_five_items_and_only_settings_enabled(qtbot, context) -> No
 def test_status_bar_shows_db_and_data_folder(qtbot, context) -> None:
     window = make_window(qtbot, context)
     assert str(context.paths.root) in window.data_label.text()
-    assert "스키마 v6" in window.db_label.text()
+    assert "스키마 v7" in window.db_label.text()
 
 
 def test_ollama_status_connected(qtbot, context) -> None:

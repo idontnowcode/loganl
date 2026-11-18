@@ -17,17 +17,21 @@ from app import __version__
 from app.ai.ollama_client import OllamaClient
 from app.analysis.anomaly_detector import Finding, detect
 from app.analysis.case_retriever import (
+    REFERENCE_POOL,
     SimilarCase,
     approved_normal_types,
+    comparison_pool,
     find_similar,
     normal_types_for_cases,
     reference_normals,
 )
+from app.analysis.reference_checks import ReferenceFile, compare_with_normals
 from app.analysis.reference_matcher import PassageHit, ReferenceMatch, match_passages, match_references
 from app.analysis.result_builder import ResponseGuidance, build_response_guidance
 from app.config import AppSettings
 from app.core.cancel import NEVER_CANCEL, Cancelled, CancelToken
 from app.core.feature_extractor import FileFeatures, extract
+from app.core.reparse import current_parse
 from app.core.sequence_analyzer import build_timeline
 from app.learning.normal_learner import default_client_factory
 from app.models import utc_now_iso
@@ -121,6 +125,7 @@ class DiagnosticEngine:
             patterns = PatternRepository(conn).approved_for_mode(request.mode_id) if request.mode_id else []
             any_normal = bool(CaseRepository(conn).approved(case_type="NORMAL"))
             any_abnormal = bool(CaseRepository(conn).approved(case_type="ABNORMAL"))
+        records, events = current_parse(self.database, records, events)  # 예전 버전이 읽은 로그는 지금 파서로(DT-16)
         features = [extract(r, events[r.id]) for r in records]
         merged_files: set[int] = set()
         for session_id in sorted({r.session_id for r in records}):  # 세션마다 따로 시간축(§4.1)
@@ -135,7 +140,9 @@ class DiagnosticEngine:
         cancel.raise_if_cancelled()
 
         report(1, STEPS, "비슷한 정상 로그 찾기 · 결정론 분석(명시적 오류·누락·순서·반복·지연)")
-        similar_normal = find_similar(self.database, features, "NORMAL", request.mode_id)
+        # 비교 통계(CR-08)는 비슷한 정상 로그를 넓게(최대 20개) 쓰고, 화면·AI에는 위 5개만 보인다
+        normal_pool = find_similar(self.database, features, "NORMAL", request.mode_id, limit=REFERENCE_POOL)
+        similar_normal = normal_pool[:5]
         reference: list = []
         if request.mode_id is None:
             # CR-06 LI-06: 모드를 고르지 않으면 가장 비슷한 승인 정상 로그를 기준으로 '본 적 없는 이벤트'를 찾는다.
@@ -150,6 +157,17 @@ class DiagnosticEngine:
         else:
             normal_types = approved_normal_types(self.database, request.mode_id)
         findings = detect(features, patterns, normal_types)
+        pool = comparison_pool(normal_pool) if request.mode_id is None else []
+        if pool:
+            # CR-08 DT-01~14: 비슷한 정상 로그와 비교한 차이. 모두 '의심'이다. 기준이 많을수록 우연한 공통점(가끔 나오는
+            # 이벤트·비슷한 반복 횟수)을 규칙으로 착각하지 않으므로 넓게(최대 20개) 쓴다. 점수가 0.4보다 조금 낮아도
+            # 입력 로그의 이벤트 종류를 거의 다 담은 정상 로그는 기준이 된다(끊긴 로그·무언가 통째로 빠진 로그).
+            reference_files = self._reference_files(pool)
+            for f in features:
+                findings.extend(compare_with_normals(f, events[f.log_file_id], reference_files))
+            if not reference:
+                notes.append(f"점수 0.4 이상인 정상 로그는 없지만, 이 로그의 이벤트 종류를 대부분 담은 정상 로그 {len(pool)}개와 "
+                             "비교했습니다(일부가 빠진 로그일 수 있음).")
         cancel.raise_if_cancelled()
 
         report(2, STEPS, "승인된 사례 검색")
@@ -362,20 +380,32 @@ class DiagnosticEngine:
                 add("AI_UNKNOWN", item, [])
                 claims.add(claim_text=item, claim_kind="UNKNOWN", source="AI", analysis_run_id=run_id)
 
+    def _reference_files(self, reference) -> list[ReferenceFile]:
+        out: list[ReferenceFile] = []
+        with closing(self.database.connect()) as conn:
+            for s in reference:
+                ids = CaseRepository(conn).log_file_ids(s.case.id)
+                records = LogFileRepository(conn).get_many(ids)
+                events = EventRepository(conn).for_files(ids)
+                records, events = current_parse(self.database, records, events)
+                out.extend(ReferenceFile(extract(r, events[r.id]), events[r.id], s.case.id) for r in records)
+        return out
+
     @staticmethod
     def _axes(request, features: list[FileFeatures], findings: list[Finding], patterns, similar_normal,
               similar_abnormal, guidance, any_normal: bool, any_abnormal: bool, normal_types,
               reference_found: bool = False) -> dict[str, str]:
-        types = {f.finding_type for f in findings}
-        violations = types & {"MISSING_EVENT", "ORDER_VIOLATION"}
-        suspects = types & {"EXPLICIT_ERROR", "REPETITION", "LATENCY"}
+        # 결정론 근거의 무게로 나눈다: 승인된 규칙을 어긴 것(VIOLATION)과 관찰된 것과 다른 것(SUSPECT, CR-08 비교 포함)
+        deterministic = [f for f in findings if f.layer == "DETERMINISTIC" and f.stance == "SUPPORTS"]
+        violations = {f.finding_type for f in deterministic if f.severity == "VIOLATION"}
+        suspects = {f.finding_type for f in deterministic if f.severity == "SUSPECT"}
         # 모드 없이 분석하면 승인된 정상 로그 전체와 비교했으므로, 정상 로그가 하나라도 있으면 '판단 못 함'이 아니라
         # 점수대로 일치·일부·불일치로 본다(비슷한 것이 없으면 불일치, CR-07 화면 점검).
         has_normal_knowledge = bool(patterns) or normal_types is not None or (request.mode_id is None and any_normal)
         best_normal = max((s.similarity for s in similar_normal), default=0.0)
         if not has_normal_knowledge:
             normal_match = "NOT_EVALUATED"
-        elif not violations and not (types & {"REPETITION", "LATENCY"}) and best_normal >= 0.6:
+        elif not violations and not (suspects - {"EXPLICIT_ERROR"}) and best_normal >= 0.6:
             normal_match = "MATCH"
         elif best_normal >= 0.3:
             normal_match = "PARTIAL"

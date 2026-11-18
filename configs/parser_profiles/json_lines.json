@@ -1,0 +1,10 @@
+{
+  "name": "json_lines",
+  "description": "범용 예시 프로파일: 한 줄에 JSON 객체 하나(JSON Lines). 시각·레벨·구성요소·메시지는 흔한 키 이름(ts/time/timestamp, level, module/component, msg/message)으로 찾고, 나머지 키는 key=value로 메시지 뒤에 붙인다. 특정 장비의 형식이 아니다.",
+  "line_format": "json",
+  "timestamp": {"kind": "iso"},
+  "continuation": true,
+  "sniff_threshold": 0.6,
+  "code_regex": "(?i)\\b(?:code|err(?:or)?)\\s*[=:]\\s*(?P<code>[A-Za-z0-9_\\-]+)",
+  "event_rules": []
+}

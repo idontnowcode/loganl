@@ -1,7 +1,7 @@
 {
   "name": "generic_iso_level",
-  "description": "범용 예시 프로파일: 'YYYY-MM-DD HH:MM:SS(.fff)(시간대) [LEVEL] 구성요소: 메시지'. 특정 장비의 형식이 아니다. 실제 형식은 새 프로파일로 더한다.",
-  "line_regex": "^(?P<ts>\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}(?:[.,]\\d{1,6})?(?:Z|[+-]\\d{2}:?\\d{2})?)\\s+\\[?(?P<level>(?i:TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|ERR|FATAL|CRIT|CRITICAL|ALERT|EMERG|SEVERE))\\]?\\s+(?:(?P<component>[A-Za-z0-9_.\\-/]+):\\s+)?(?P<message>.*)$",
+  "description": "범용 예시 프로파일: 'YYYY-MM-DD HH:MM:SS(.fff)(시간대) [LEVEL] 또는 <level> 구성요소: 또는 [구성요소] 메시지'. 특정 장비의 형식이 아니다. 실제 형식은 새 프로파일로 더한다.",
+  "line_regex": "^(?P<ts>\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}(?:[.,]\\d{1,6})?(?:Z|[+-]\\d{2}:?\\d{2})?)\\s+[\\[<]?(?P<level>(?i:TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|ERR|FATAL|CRIT|CRITICAL|ALERT|EMERG|SEVERE))[\\]>]?\\s+(?:\\[?(?P<component>[A-Za-z0-9_.\\-/]+)(?:\\]|:)\\s+)?(?P<message>.*)$",
   "timestamp": {"kind": "iso"},
   "continuation": true,
   "sniff_threshold": 0.6,

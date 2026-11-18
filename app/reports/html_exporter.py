@@ -31,7 +31,7 @@ def render_html(data: dict[str, Any]) -> str:
         f"<title>분석 보고서 {_e(run['label'])}</title><style>{CSS}</style></head><body>",
         f"<h1>로그 분석 보고서 {_e(run['label'])}</h1>",
         f"<div class='meta'>{_e(data['app'])} · {_e(data['plan'])} · 만든 시각 {_e(data['generated_at'])}<br>"
-        f"상태 {_e(run['status'])} · 운전 모드 {_e(run['mode'] or '모름')}{' (확인됨)' if run['mode_confirmed'] else ''}</div>",
+        f"상태 {_e(run['status'])} · 가장 비슷한 승인 정상 로그와 비교</div>",  # CR-09: 운전 모드로 나누지 않는다
         f"<h2>권장 대응 — {_e(data['axes']['response_guidance']['text'])}</h2><div class='{level_class}'>",
     ]
     if guidance["items"]:

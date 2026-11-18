@@ -24,7 +24,7 @@ def ctx(tmp_path: Path):
 
 
 def test_panel_shows_top_three_and_applies_answers(qtbot, ctx, tmp_path: Path) -> None:
-    mode_id = ModeManager(ctx.database).add("테스트모드A")
+    ModeManager(ctx.database).add("테스트모드A")  # 예전 데이터에 모드가 있어도 묻지 않는다(CR-09)
     ids = LogImporter(ctx.database, ctx.paths, ctx.settings.import_).import_logs(ImportRequest(
         paths=[abnormal_log(tmp_path / "a.log"), write(tmp_path / "free.txt", ["TEST free"])],
         purpose=OriginPurpose.NORMAL_CASE, session_mode=SessionMode.UNKNOWN)).log_file_ids
@@ -38,11 +38,7 @@ def test_panel_shows_top_three_and_applies_answers(qtbot, ctx, tmp_path: Path) -
     assert "필수 0개" in panel.summary.text()  # CR-06: 모드·정상 근거 질문은 선택
     assert page.status_label.text().startswith("초안")
 
-    mode_row = next(r for r in panel.rows if r.question.trigger == "MODE_UNKNOWN")
-    mode_row.choice.setCurrentIndex(mode_row.choice.findData(str(mode_id)))
-    next(b for b in mode_row.findChildren(QPushButton) if b.text() == "답변").click()
-    assert page.mode_combo.currentData() == mode_id and page.mode_confirm.isChecked()
-    assert "패턴 후보" in page.message_label.text()
+    assert all(r.question.trigger != "MODE_UNKNOWN" for r in panel.rows)  # CR-09: 운전 모드는 묻지 않는다
 
     rationale_row = next(r for r in page.question_panel.rows if r.question.trigger == "NORMAL_RATIONALE_MISSING")
     rationale_row.text.setText("가상 근거")
