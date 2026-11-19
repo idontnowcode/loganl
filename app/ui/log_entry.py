@@ -1,6 +1,6 @@
 """'로그 입력' 탭 (변경 요청 CR-06). 정상·비정상 학습 탭을 하나로 합쳤다.
 
-사용자가 하는 일: 로그를 끌어 놓고 가져오기 → 목록에서 로그를 골라 정상/비정상 → 어떤 동작이었는지 메모
+사용자가 하는 일: 로그를 끌어 놓기(바로 올라옴, CR-10) → 목록에서 로그를 골라 정상/비정상 → 어떤 동작이었는지 메모
 → (비정상이면) 에러로 판단한 근거 → 저장. 저장하면 바로 학습에 쓰인다(learning.log_entry).
 패턴 확정·가이드 첨부·질문은 '자세히 편집' 창(예전 학습 화면)에서 한다.
 """
@@ -36,7 +36,9 @@ from app.learning.case_manager import CaseError
 from app.learning.log_entry import LABELS, LogEntry, LogEntryError, LogEntryService
 from app.learning.normal_learner import default_client_factory
 from app.models.enums import OriginPurpose
+from app.analysis.error_messages import ErrorMessage, file_error_candidates
 from app.ui.ai_questions_box import AiQuestionsBox
+from app.ui.error_messages_box import ErrorMessagesBox
 from app.ui.log_import_panel import LogImportPanel
 from app.ui.natural_input import StatusLine
 from app.ui.theme import comfortable_table, scroll_wrap, set_role
@@ -73,11 +75,13 @@ class LogEntryPage(QWidget):
         self._dirty = False
         self._shown_ids: list[int] = []
 
-        self.import_panel = LogImportPanel(context, OriginPurpose.NORMAL_CASE)
+        self.import_panel = LogImportPanel(context, OriginPurpose.NORMAL_CASE, allow_clear=True)
         self.import_panel.files_changed.connect(lambda _ids: self.refresh_entries())
+        # CR-10 LI-12: 목록에서 빼기 전에 정상/비정상을 고른 입력은 저장한다(자동 저장과 같은 규칙)
+        self.import_panel.removing.connect(lambda ids: self.autosave(only=list(ids)))
         self.runner = self.import_panel.runner
 
-        steps = QLabel("진행 순서  ① 왼쪽에 로그를 끌어 놓고 가져오기 → ② 아래 목록에서 로그를 고르기(여러 개 가능) → "
+        steps = QLabel("진행 순서  ① 왼쪽 칸에 로그를 끌어 놓기(바로 올라옴) → ② 아래 목록에서 로그를 고르기(여러 개 가능) → "
                        "③ 정상/비정상 고르기(필수), 메모·판단 가이드(선택) → ④ 저장. 저장하면 바로 학습에 쓰이고, "
                        "AI가 그 로그를 보고 궁금한 점을 'AI 질문'에 남깁니다(답은 선택).")
         steps.setWordWrap(True)
@@ -96,7 +100,7 @@ class LogEntryPage(QWidget):
         comfortable_table(self.entry_table, elide_middle=True)
         self.entry_table.setMinimumHeight(170)
         self.entry_table.itemSelectionChanged.connect(self._on_selection_changed)
-        self.empty_label = QLabel("왼쪽에서 로그를 가져오면 여기에 파일마다 한 줄씩 나옵니다.")
+        self.empty_label = QLabel("왼쪽 칸에 로그를 끌어 놓으면 여기에 파일마다 한 줄씩 나옵니다.")
         set_role(self.empty_label, "muted")
         list_box = QGroupBox("가져온 로그 (파일마다 정상/비정상과 메모)")
         list_layout = QVBoxLayout(list_box)
@@ -131,6 +135,11 @@ class LogEntryPage(QWidget):
         self.criteria_edit.setTabChangesFocus(True)
         for widget in (self.memo_edit, self.criteria_edit):
             widget.textChanged.connect(self._mark_dirty)
+        # CR-11 EM-04: '비정상'을 고르면 그 로그에서 에러로 보이는 줄(정상 로그와 비교하지 않은 후보)
+        self.error_box = ErrorMessagesBox("이 로그에서 에러로 보이는 줄 (자동으로 찾음 · 두 번 누르면 원본 행)")
+        self.error_box.go_to.connect(lambda log_file_id, line: self.import_panel.show_line(log_file_id, line))
+        self.error_box.hide()
+        self._candidates: dict[int, list[ErrorMessage]] = {}
         self.save_button = QPushButton("저장 (바로 학습에 씀)")
         set_role(self.save_button, variant="primary")
         self.save_button.clicked.connect(self.save_selected)
@@ -152,6 +161,7 @@ class LogEntryPage(QWidget):
         editor.addWidget(self.memo_edit)
         editor.addWidget(self.criteria_label)
         editor.addWidget(self.criteria_edit)
+        editor.addWidget(self.error_box)
         editor.addLayout(buttons)
         editor.addWidget(self.message)
 
@@ -303,6 +313,22 @@ class LogEntryPage(QWidget):
         abnormal = self.abnormal_radio.isChecked()
         self.criteria_label.setVisible(abnormal)
         self.criteria_edit.setVisible(abnormal)
+        self._show_candidates(abnormal)
+
+    def _show_candidates(self, abnormal: bool) -> None:
+        ids = self._shown_ids
+        if not abnormal or len(ids) != 1:  # 로그 하나를 비정상으로 골랐을 때만
+            self.error_box.hide()
+            return
+        log_file_id = ids[0]
+        if log_file_id not in self._candidates:
+            self._candidates[log_file_id] = file_error_candidates(self.context.database, log_file_id)
+        messages = self._candidates[log_file_id]
+        self.error_box.show_messages(
+            messages,
+            f"에러 레벨·오류 코드 줄과 경고·실패 낱말 줄 {len(messages)}개입니다. 정상 로그와 비교하지 않은 후보이니 "
+            "판단 가이드를 적을 때 참고하세요. 줄은 로그 원문 그대로입니다.",
+            "에러 레벨·오류 코드·경고 낱말이 있는 줄을 찾지 못했습니다. 어떤 점을 보고 에러로 판단했는지 위에 적어 주세요.")
 
     def _mark_dirty(self) -> None:
         if not self._loading:

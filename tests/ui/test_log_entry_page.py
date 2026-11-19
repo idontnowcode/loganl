@@ -164,3 +164,32 @@ def test_late_result_after_close_is_ignored(qtbot, ctx) -> None:
 
     shiboken6.delete(box)  # 화면이 먼저 닫힌 것처럼
     widget._on_questions("x.log", QuestionOutcome("OK"))  # 예외 없이 넘어간다
+
+
+def test_clear_list_saves_labeled_input_first(page) -> None:  # CR-10 LI-12
+    first = page.import_panel.log_file_ids()[0]
+    page.normal_radio.setChecked(True)  # 첫 줄을 '정상'으로 고르고 저장 단추는 누르지 않음
+    page.memo_edit.setPlainText("가상 동작 한 번")
+    assert not page.import_panel.clear_button.isHidden()
+    page.import_panel.clear_button.click()
+    assert page.entry_table.rowCount() == 0 and page.empty_label.isVisibleTo(page)
+    saved = page.service.entry(first)
+    assert saved.label == "NORMAL" and saved.memo == "가상 동작 한 번"  # 비우기 전에 자동 저장
+    assert page.saved_table.rowCount() == 1
+
+
+def test_abnormal_choice_shows_error_lines(page) -> None:  # CR-11 EM-04
+    select(page, 2)  # a.log (가상 비정상 로그)
+    page._on_selection_changed()
+    assert page.error_box.isHidden()
+    page.abnormal_radio.setChecked(True)
+    assert not page.error_box.isHidden()
+    texts = page.error_box.texts()
+    assert texts[0].startswith("[에러로 기록된 줄] 4행 ×2") and "TEST-E001" in texts[0]
+    assert texts[1].startswith("[경고·실패 낱말이 있는 줄] 5행")
+    page.normal_radio.setChecked(True)
+    assert page.error_box.isHidden()  # 정상이면 숨김
+    select(page, 0, 2)
+    page._on_selection_changed()
+    page.abnormal_radio.setChecked(True)
+    assert page.error_box.isHidden()  # 여러 개를 고르면 띄우지 않는다

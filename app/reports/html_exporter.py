@@ -45,6 +45,20 @@ def render_html(data: dict[str, Any]) -> str:
     for check in guidance["checks"]:
         parts.append(f"<p>원인 확인: {_e(check['text'])} <span class='key'>{_e(check['key'])}</span></p>")
     parts.append("</div>")
+    if data.get("errors") is not None:  # CR-11 EM-03: 비정상으로 보인 로그만
+        parts.append("<h2>예상 에러 메시지 — 문제로 보이는 원문 줄 (자동으로 고름)</h2>")
+        if data["errors"]:
+            parts.append("<table><tr><th>묶음</th><th>행</th><th>원문</th><th>고른 이유</th></tr>")
+            names = {f["id"]: f["name"] for f in data["files"]}
+            for m in data["errors"]:
+                where = (f"{_e(names.get(m['file_id'], ''))} {_e(m['line'])}행" if m["line"] is not None else "—")
+                times = f" ×{_e(m['count'])}" if m.get("count") and m["count"] > 1 else ""
+                ref = f"<br>참고 자료: {_e(m['reference'])}" if m.get("reference") else ""
+                parts.append(f"<tr><td>{_e(m['group_title'])}</td><td>{where}{times}</td><td><code>{_e(m['text'])}</code></td>"
+                             f"<td>{_e(m['reason'])} <span class='key'>{_e(m['key'] or '')}</span>{ref}</td></tr>")
+            parts.append("</table>")
+        else:
+            parts.append("<p>에러로 보이는 줄을 찾지 못했습니다. 아래 근거를 보세요.</p>")
     if data.get("references"):
         parts.append("<h2>참고 자료 — 로그에 나온 코드 (승인된 참고 자료, 권장 대응과 별개)</h2><table>"
                      "<tr><th>코드</th><th>횟수·처음 위치</th><th>명칭</th><th>설명</th><th>원인</th><th>조치</th><th>출처</th></tr>")

@@ -84,18 +84,13 @@ def test_valid_diagnosis_is_stored_with_evidence(with_model, knowledge, tmp_path
 
 @pytest.mark.parametrize("mutate, rule", [
     (lambda a, k: a["hypotheses"][0].update(evidence=["EV-9999"]), "V-3"),  # T-HAL-01 없는 근거 키
-    (lambda a, k: a["observations"].append({"text": "TEST-E777 오류가 났다", "evidence": [k["error"]]}), "V-4"),  # T-HAL-04
-    (lambda a, k: a["observations"].__setitem__(0, {"text": "관측", "evidence": [k["cause"]]}), "V-4"),
-    (lambda a, k: a["hypotheses"].append({"text": "TEST-E001은 과열을 뜻한다", "evidence": [k["error"]]}), "V-5"),  # T-HAL-02
     (lambda a, k: a["hypotheses"][0].update(text="원인은 확실히 가상 원인 1이다"), "V-6"),  # T-HAL-03
-    (lambda a, k: a["hypotheses"].append({"text": "근거 없는 추측", "evidence": []}), "V-8"),
-    (lambda a, k: a["response_plan"].append({"text": "보드를 교체한다", "evidence": [k["error"]]}), "V-9"),  # T-HAL-06
-    (lambda a, k: a["response_plan"].append({"text": "새 조치", "evidence": []}), "V-9"),
+    (lambda a, k: {key: [] for key in a} | {"abnormal_likelihood": None}, "V-1"),  # 내용 없는 응답
 ])
 def test_rule_violations_are_rejected(with_model, knowledge, tmp_path: Path, mutate, rule) -> None:
     keys = keys_for(with_model, knowledge, tmp_path)
     bad = good_answer(keys)
-    mutate(bad, keys)
+    bad = mutate(bad, keys) or bad  # 새 사전을 돌려주는 변형(빈 응답)도 있다
     result, _ = analyze(with_model, knowledge, tmp_path / "2", [bad, bad])  # 다시 물어도 같은 위반
     assert result.ai.status == "VALIDATION_FAILED"
     assert any(e.startswith(rule) for e in result.ai.errors), result.ai.errors
@@ -105,6 +100,48 @@ def test_rule_violations_are_rejected(with_model, knowledge, tmp_path: Path, mut
     assert run["ai_status"] == "VALIDATION_FAILED" and run["status"] == "COMPLETED"
     assert not any(r["layer"] == "AI" for r in rows)  # 검증 실패분은 저장하지 않는다
     assert any(r["layer"] == "DETERMINISTIC" for r in rows)  # 결정론 결과는 남는다(T-DONE-05)
+
+
+@pytest.mark.parametrize("mutate, gone, moved", [
+    # V-4: 근거에 없는 코드를 적은 관측(T-HAL-04), 로그 근거를 가리키지 않는 관측은 버린다
+    (lambda a, k: a["observations"].append({"text": "TEST-E777 오류가 났다", "evidence": [k["error"]]}), "TEST-E777", False),
+    (lambda a, k: a["observations"].append({"text": "가상 관측 문장", "evidence": [k["cause"]]}), "가상 관측 문장", False),
+    # V-5: 승인 지식 없이 코드의 뜻을 말하는 가설은 버린다(T-HAL-02). 판단 불가로도 옮기지 않는다
+    (lambda a, k: a["hypotheses"].append({"text": "TEST-E001은 과열을 뜻한다", "evidence": [k["error"]]}), "과열", False),
+    # V-9: 승인된 대응·가이드 근거가 아닌 조치 문장은 버린다(T-HAL-06 '보드를 교체한다'는 화면에 안 나옴)
+    (lambda a, k: a["response_plan"].append({"text": "보드를 교체한다", "evidence": [k["error"]]}), "보드를 교체한다", False),
+    (lambda a, k: a["response_plan"].append({"text": "새 조치", "evidence": []}), "새 조치", False),
+    # V-8: 근거 없는 가설은 판단 불가로 옮기고, 'UNKNOWN일 수 있다' 같은 자리표시는 버린다
+    (lambda a, k: a["hypotheses"].append({"text": "근거 없는 추측", "evidence": []}), "근거 없는 추측", True),
+    (lambda a, k: a["hypotheses"].append({"text": "UNKNOWN일 수 있다", "evidence": [k["case"]]}), "UNKNOWN일 수 있다", False),
+    # V-11: 근거 키 없는 비정상 가능성은 매기지 않은 것으로(이유는 판단 불가로)
+    (lambda a, k: a.update(abnormal_likelihood=100, likelihood_reason="비교할 정상 로그 없음"), "비교할 정상 로그 없음", True),
+])
+def test_unsupported_items_are_dropped_not_whole_answer(with_model, knowledge, tmp_path: Path, mutate, gone, moved) -> None:
+    """2026-11-19 실제 모델: 어긋난 항목 하나 때문에 응답 전체가 두 번 거부돼 AI 의견이 안 나왔다.
+    정책 V-9 '근거 없는 조치 문장은 버림'대로 그 항목만 빼고, 남은 응답은 V-1~V-11을 모두 다시 받는다."""
+    keys = keys_for(with_model, knowledge, tmp_path)
+    answer = good_answer(keys)
+    mutate(answer, keys)
+    result, fake = analyze(with_model, knowledge, tmp_path / "2", [answer])
+    assert result.ai.status == "OK" and len(fake.requests) == 1, result.ai.errors
+    value = result.ai.answer
+    assert all(gone not in s.text for s in value.observations + value.response_plan + value.hypotheses)  # type: ignore[operator]
+    assert any(gone in u for u in value.unknowns) is moved
+    assert value.observations and value.hypotheses  # 어긋나지 않은 항목은 그대로 쓴다
+    assert value.abnormal_likelihood is None
+    assert [s.text for s in value.response_plan][:1] == ["가상 장비를 대기 상태로 둔다"]  # 나머지는 그대로
+
+
+def test_request_sets_context_length_for_long_prompt(with_model, knowledge, tmp_path: Path) -> None:
+    """num_ctx를 주지 않으면 Ollama가 기본 문맥(약 2,000토큰)에 맞춰 앞부분(시스템 지시)을 잘라 버린다(2026-11-19)."""
+    from app.ai.ollama_client import CHARS_PER_TOKEN, MIN_CONTEXT
+
+    keys = keys_for(with_model, knowledge, tmp_path)
+    _, fake = analyze(with_model, knowledge, tmp_path / "2", [good_answer(keys)])
+    body = fake.requests[0]
+    sent = sum(len(m["content"]) for m in body["messages"])
+    assert body["options"]["num_ctx"] >= max(MIN_CONTEXT, sent / CHARS_PER_TOKEN)
 
 
 def test_retry_recovers_after_bad_answer(with_model, knowledge, tmp_path: Path) -> None:  # T-NA-09

@@ -1,6 +1,8 @@
-"""공용 로그 입력 패널: 복수 파일 끌어 놓기·추가, 수집 세션 구분, 백그라운드 가져오기(진행률·취소), 파일 목록, 뷰어.
+"""공용 로그 입력 패널: 끌어 놓거나 고르면 바로 가져오기(진행률·취소), 수집 세션 구분, 올라온 로그 목록, 원문 보기.
 
-세 탭(정상 학습·비정상 학습·신규 분석)이 같은 패널을 용도(purpose)만 바꿔 쓴다.
+로그 입력·신규 분석·자세히 편집 화면이 같은 패널을 용도(purpose)만 바꿔 쓴다.
+CR-10: 대기 목록과 '가져오기' 단추 없이 넣으면 바로 가져온다(LI-11), 목록 전체 비우기(LI-12),
+이벤트 표·세션 타임라인은 '로그 원문 보기'에 접어 둔다(LI-13).
 """
 
 from __future__ import annotations
@@ -14,14 +16,13 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
-    QListWidget,
     QProgressBar,
     QPushButton,
-    QSplitter,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -38,7 +39,7 @@ from app.parsers.parser_registry import ParserRegistry
 from app.storage.repositories import EventRepository, LogFileRepository
 from app.ui.log_viewer import LogViewer
 from app.ui.natural_input import Collapsible
-from app.ui.theme import comfortable_table, set_role
+from app.ui.theme import comfortable_table, set_role, tone_color
 from app.ui.timeline_view import TimelineView
 from app.ui.workers import TaskRunner
 
@@ -54,24 +55,43 @@ BASIS_LABELS = {
 FILE_COLUMNS = ("파일", "세션", "인코딩", "줄", "이벤트", "타임스탬프", "파서", "역할")
 
 
-class DropList(QListWidget):
+class DropZone(QFrame):
+    """로그 파일을 끌어 놓는 칸. 놓으면 바로 가져온다(CR-10 LI-11)."""
+
     paths_dropped = Signal(list)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setAcceptDrops(True)
-        self.setMinimumHeight(70)
-        self.setMaximumHeight(150)
+        set_role(self, "dropzone")
+        self.label = QLabel("로그 파일(TXT·LOG)을 여기로 끌어 놓거나 '파일 추가…'를 누르세요.\n"
+                            "넣으면 바로 가져와 아래 '올라온 로그'에 올라갑니다.")
+        self.label.setWordWrap(True)
+        self.add_button = QPushButton("파일 추가…")
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.addWidget(self.label, 1)
+        layout.addWidget(self.add_button, 0, Qt.AlignmentFlag.AlignVCenter)
+
+    def _set_active(self, active: bool) -> None:
+        self.setProperty("active", "true" if active else "false")
+        set_role(self)
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:  # noqa: N802
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
+            self._set_active(True)
 
     def dragMoveEvent(self, event) -> None:  # noqa: N802
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
 
+    def dragLeaveEvent(self, event) -> None:  # noqa: N802
+        self._set_active(False)
+        super().dragLeaveEvent(event)
+
     def dropEvent(self, event: QDropEvent) -> None:  # noqa: N802
+        self._set_active(False)
         paths = [Path(url.toLocalFile()) for url in event.mimeData().urls() if url.isLocalFile()]
         self.paths_dropped.emit(paths)
         event.acceptProposedAction()
@@ -79,9 +99,12 @@ class DropList(QListWidget):
 
 class LogImportPanel(QWidget):
     files_changed = Signal(list)  # 이 패널에 올라온 log_file_id 목록
-    import_finished = Signal(object)  # ImportResult
+    import_finished = Signal(object)  # ImportResult (한 번 가져올 때마다)
+    current_file_changed = Signal(object)  # 목록에서 고른 log_file_id (없으면 None)
+    removing = Signal(list)  # 목록에서 빼기 직전의 log_file_id (로그 입력 탭이 입력을 먼저 저장한다)
 
-    def __init__(self, context: AppContext, purpose: OriginPurpose, parent: QWidget | None = None) -> None:
+    def __init__(self, context: AppContext, purpose: OriginPurpose, parent: QWidget | None = None, *,
+                 status_column: str | None = None, allow_clear: bool = False) -> None:
         super().__init__(parent)
         self.context = context
         self.purpose = purpose
@@ -89,15 +112,16 @@ class LogImportPanel(QWidget):
         self.runner = TaskRunner(self)
         self._cancel: CancelToken | None = None
         self._ids: list[int] = []
+        self._records: list[LogFileRecord] = []
+        self._queue: list[Path] = []  # 가져오는 중에 더 넣은 파일(끝나면 이어서)
+        self._status: dict[int, tuple[str, str | None, str | None]] = {}  # id → (글, 색조, 풀이)
+        self.status_column = status_column
+        self.columns = (FILE_COLUMNS[0], status_column, *FILE_COLUMNS[1:]) if status_column else FILE_COLUMNS
 
-        self.pending = DropList()
-        self.pending.setMaximumHeight(130)  # 옵션을 접은 뒤 대기 목록이 자리를 다 먹지 않게
-        self.pending.paths_dropped.connect(self.add_paths)
-        self.pending.setToolTip("TXT/LOG 파일을 여기로 끌어 놓으세요")
-        add_button = QPushButton("파일 추가…")
-        add_button.clicked.connect(self._browse)
-        clear_button = QPushButton("대기 목록 비우기")
-        clear_button.clicked.connect(self.pending.clear)
+        self.drop_zone = DropZone()
+        self.drop_zone.paths_dropped.connect(self.add_paths)
+        self.add_button = self.drop_zone.add_button
+        self.add_button.clicked.connect(self._browse)
 
         self.session_combo = QComboBox()
         for mode, label in SESSION_CHOICES:
@@ -115,10 +139,7 @@ class LogImportPanel(QWidget):
         self.fw_edit = QLineEdit()
         self.fw_edit.setPlaceholderText("선택")
 
-        self.import_button = QPushButton("가져오기")
-        set_role(self.import_button, variant="primary")
-        self.import_button.clicked.connect(self.start_import)
-        self.cancel_button = QPushButton("취소")
+        self.cancel_button = QPushButton("가져오기 취소")
         self.cancel_button.setEnabled(False)
         self.cancel_button.clicked.connect(self.cancel_import)
         self.progress = QProgressBar()
@@ -129,19 +150,25 @@ class LogImportPanel(QWidget):
         set_role(self.message_label, "muted")
         self.message_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
-        self.file_table = QTableWidget(0, len(FILE_COLUMNS))
-        self.file_table.setHorizontalHeaderLabels(FILE_COLUMNS)
+        self.file_table = QTableWidget(0, len(self.columns))
+        self.file_table.setHorizontalHeaderLabels(self.columns)
         self.file_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.file_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.file_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.file_table.verticalHeader().setVisible(False)
         self.file_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.file_table.horizontalHeader().setStretchLastSection(True)
-        self.file_table.currentCellChanged.connect(lambda row, *_: self._show_row(row))
+        self.file_table.currentCellChanged.connect(lambda row, *_: self._on_current_row(row))
         comfortable_table(self.file_table, elide_middle=True)
-        self.file_table.setMinimumHeight(150)  # 머리 + 3줄
-        remove_button = QPushButton("선택 파일을 이 목록에서 빼기")
-        remove_button.clicked.connect(self._remove_selected)
+        self.file_table.setMinimumHeight(220)  # 머리 + 5줄. 많으면 표 안에서 스크롤
+        self.files_title = QLabel("올라온 로그")
+        set_role(self.files_title, "cell-label")
+        self.remove_button = QPushButton("선택 파일을 이 목록에서 빼기")
+        self.remove_button.clicked.connect(self._remove_selected)
+        self.clear_button = QPushButton("목록 비우기")
+        self.clear_button.setToolTip("올라온 로그를 모두 목록에서 뺍니다. 가져온 로그와 저장한 내용은 지우지 않습니다.")
+        self.clear_button.clicked.connect(self.clear_list)
+        self.clear_button.setVisible(allow_clear)
 
         self.viewer = LogViewer(context.database)
 
@@ -151,87 +178,83 @@ class LogImportPanel(QWidget):
         options.addRow("파서", self.profile_combo)
         options.addRow("로그 역할", self.role_edit)
         options.addRow("FW 버전", self.fw_edit)
-
-        pending_box = QVBoxLayout()
-        pending_box.addWidget(QLabel("가져올 파일 (끌어 놓기 가능)"))
-        pending_box.addWidget(self.pending)
-        buttons = QHBoxLayout()
-        buttons.addWidget(add_button)
-        buttons.addWidget(clear_button)
-        pending_box.addLayout(buttons)
-
-        # CR-07 LI-10: 옵션은 보통 건드릴 일이 없어 접어 둔다(지우지 않음). 대기 목록이 넓게 보인다.
         options_widget = QWidget()
         options_widget.setLayout(options)
         options.setContentsMargins(0, 0, 0, 0)
-        self.options_section = Collapsible("가져오기 옵션 (수집 세션·파서·로그 역할·FW — 보통은 그대로)", options_widget)
-        top = QVBoxLayout()
-        top.addLayout(pending_box)
-        top.addWidget(self.options_section)
+        self.options_section = Collapsible("가져오기 옵션 (수집 세션·파서·로그 역할·FW — 보통은 그대로, 파일을 넣기 전에)",
+                                           options_widget)
 
         run_row = QHBoxLayout()
-        run_row.addWidget(self.import_button)
-        run_row.addWidget(self.cancel_button)
         run_row.addWidget(self.progress, 1)
+        run_row.addWidget(self.cancel_button)
 
-        files_box = QWidget()
-        files_layout = QVBoxLayout(files_box)
-        files_layout.setContentsMargins(0, 0, 0, 0)
-        files_layout.addWidget(QLabel("올라온 로그"))
-        files_layout.addWidget(self.file_table)
-        files_layout.addWidget(remove_button, 0, Qt.AlignmentFlag.AlignLeft)
+        list_buttons = QHBoxLayout()
+        list_buttons.addWidget(self.remove_button)
+        list_buttons.addWidget(self.clear_button)
+        list_buttons.addStretch(1)
+
+        # CR-10 LI-13: 이벤트 표·세션 타임라인은 보통 볼 일이 없어 접어 둔다(지우지 않음)
         self.timeline = TimelineView(context.database)
         self.timeline.go_to.connect(self.show_line)
         self.views = QTabWidget()
         self.views.addTab(self.viewer, "이벤트 표 (파일별)")
         self.views.addTab(self.timeline, "세션 타임라인 (여러 파일)")
-        self.views.setMinimumHeight(400)
+        self.views.setMinimumHeight(420)
         self.views.currentChanged.connect(lambda index: index == 1 and self.timeline.set_records(self.records()))
-        split = QSplitter(Qt.Orientation.Vertical)
-        split.addWidget(files_box)
-        split.addWidget(self.views)
-        split.setSizes([180, 460])
-        split.setChildrenCollapsible(False)
+        self.views_section = Collapsible("로그 원문 보기 (이벤트 표·세션 타임라인)", self.views)
+        self.views_section.toggle.toggled.connect(self._on_views_toggled)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addLayout(top)
+        layout.addWidget(self.drop_zone)
+        layout.addWidget(self.options_section)
         layout.addLayout(run_row)
         layout.addWidget(self.message_label)
-        layout.addWidget(split, 1)
+        layout.addWidget(self.files_title)
+        layout.addWidget(self.file_table, 1)
+        layout.addLayout(list_buttons)
+        layout.addWidget(self.views_section)
 
     # ── 공개 동작 ──
     def add_paths(self, paths: list[Path]) -> None:
-        existing = {self.pending.item(i).text() for i in range(self.pending.count())}
+        """넣은 파일을 바로 가져온다. 가져오는 중이면 끝난 뒤 이어서 가져온다."""
         for path in paths:
-            text = str(Path(path))
-            if text not in existing:
-                self.pending.addItem(text)
-                existing.add(text)
+            path = Path(path)
+            if path not in self._queue:
+                self._queue.append(path)
+        self.start_import()
 
     def pending_paths(self) -> list[Path]:
-        return [Path(self.pending.item(i).text()) for i in range(self.pending.count())]
+        """아직 가져오지 않은 파일(가져오는 중에 더 넣은 것)."""
+        return list(self._queue)
 
     def log_file_ids(self) -> list[int]:
         return list(self._ids)
 
     def set_log_file_ids(self, ids: list[int]) -> None:
         self._ids = list(dict.fromkeys(ids))
+        self._status = {k: v for k, v in self._status.items() if k in self._ids}
         self.refresh_files()
         self.files_changed.emit(self.log_file_ids())
 
     def set_import_enabled(self, enabled: bool) -> None:
-        for widget in (self.pending, self.import_button, self.session_combo, self.session_label_edit,
-                       self.profile_combo, self.role_edit, self.fw_edit):
+        for widget in (self.drop_zone, self.add_button, self.session_combo, self.session_label_edit,
+                       self.profile_combo, self.role_edit, self.fw_edit, self.remove_button, self.clear_button):
             widget.setEnabled(enabled)
-        for button in self.findChildren(QPushButton):
-            if button.text() in ("파일 추가…", "대기 목록 비우기", "선택 파일을 이 목록에서 빼기"):
-                button.setEnabled(enabled)
 
     def clear(self) -> None:
-        self.pending.clear()
+        self._queue.clear()
         self.message_label.clear()
         self.set_log_file_ids([])
+
+    def clear_list(self) -> None:
+        """CR-10 LI-12: 올라온 로그를 모두 목록에서 뺀다. DB의 로그·사례는 그대로다."""
+        if not self._ids:
+            return
+        count = len(self._ids)
+        self.removing.emit(list(self._ids))
+        self.set_log_file_ids([])
+        self.message_label.setText(f"목록에서 로그 {count}개를 뺐습니다. 가져온 로그와 저장한 내용은 그대로 있습니다.")
 
     def build_request(self) -> ImportRequest:
         return ImportRequest(
@@ -245,11 +268,12 @@ class LogImportPanel(QWidget):
 
     def start_import(self) -> None:
         if self.runner.busy:
-            return
+            return  # 지금 가져오기가 끝나면 이어서 가져온다(_on_done)
         request = self.build_request()
         if not request.paths:
-            self.message_label.setText("가져올 파일을 먼저 추가하세요.")
+            self.message_label.setText("가져올 파일을 위 칸에 끌어 놓거나 '파일 추가…'로 고르세요.")
             return
+        self._queue.clear()
         importer = LogImporter(self.context.database, self.context.paths, self.context.settings.import_, self.registry)
         self._cancel = CancelToken()
         self._set_running(True)
@@ -261,67 +285,116 @@ class LogImportPanel(QWidget):
     def cancel_import(self) -> None:
         if self._cancel is not None:
             self._cancel.cancel()
+            self._queue.clear()
             self.progress.setFormat("취소하는 중…")
 
+    def set_status(self, log_file_id: int, text: str, tone: str | None = None, tooltip: str | None = None) -> None:
+        """결과 칸(status_column)에 글을 적는다. 신규 분석의 로그별 결과(CR-10 NA-20)."""
+        self._status[log_file_id] = (text, tone, tooltip)
+        for row, record in enumerate(self._records):
+            if record.id == log_file_id:
+                self._fill_status(row, record.id)
+
+    def current_file_id(self) -> int | None:
+        row = self.file_table.currentRow()
+        return self._records[row].id if 0 <= row < len(self._records) else None
+
+    def select_file(self, log_file_id: int) -> bool:
+        for row, record in enumerate(self._records):
+            if record.id == log_file_id:
+                self.file_table.selectRow(row)
+                return True
+        return False
+
     def refresh_files(self) -> None:
+        keep = self.current_file_id()
         with closing(self.context.database.connect()) as conn:
             records = LogFileRepository(conn).get_many(self._ids)
+            counts = {r.id: EventRepository(conn).count(r.id) for r in records}
         by_id = {r.id: r for r in records}
         self._records = [by_id[i] for i in self._ids if i in by_id]
+        self.file_table.blockSignals(True)
         self.file_table.setRowCount(len(self._records))
         for row, record in enumerate(self._records):
             values = (
                 record.original_name, record.session_label or str(record.session_id), record.encoding or "",
-                f"{record.line_count or 0:,}", self._event_count(record), BASIS_LABELS.get(record.timestamp_basis, ""),
+                f"{record.line_count or 0:,}", f"{counts.get(record.id, 0):,}", BASIS_LABELS.get(record.timestamp_basis, ""),
                 record.parser_profile or "", record.log_role or "",
             )
+            if self.status_column:
+                values = (values[0], "", *values[1:])
             for column, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
                 item.setData(Qt.ItemDataRole.UserRole, record.id)
                 self.file_table.setItem(row, column, item)
+            self._fill_status(row, record.id)
+        self.file_table.blockSignals(False)
+        self.files_title.setText(f"올라온 로그 ({len(self._records)}개)" if self._records else "올라온 로그")
         if self._records:
-            self.file_table.selectRow(0)
-            self._show_row(0)
+            ids = [r.id for r in self._records]
+            row = ids.index(keep) if keep in ids else 0
+            self.file_table.setCurrentCell(row, 0)
+            self.file_table.selectRow(row)
+            self._on_current_row(row)
         else:
             self.viewer.show_file(None)
+            self.current_file_changed.emit(None)
         if self.views.currentIndex() == 1:
             self.timeline.set_records(self._records)
 
     def show_line(self, log_file_id: int, line_no: int) -> bool:
-        """원본 행으로 이동: 파일을 고르고 이벤트 표 탭으로 바꾼다."""
-        for index, record in enumerate(self.records()):
-            if record.id == log_file_id:
-                self.file_table.selectRow(index)
-                break
+        """원본 행으로 이동: 원문 보기를 펴고, 파일을 고르고, 이벤트 표 탭으로 바꾼다."""
+        self.views_section.set_expanded(True)
+        self.select_file(log_file_id)
         self.views.setCurrentIndex(0)
         return self.viewer.go_to_line(log_file_id, line_no)
 
     def records(self) -> list[LogFileRecord]:
-        return list(getattr(self, "_records", []))
+        return list(self._records)
 
     # ── 내부 ──
-    def _event_count(self, record: LogFileRecord) -> str:
-        with closing(self.context.database.connect()) as conn:
-            return f"{EventRepository(conn).count(record.id):,}"
+    def _fill_status(self, row: int, log_file_id: int) -> None:
+        if not self.status_column:
+            return
+        text, tone, tooltip = self._status.get(log_file_id, ("—", None, None))
+        item = QTableWidgetItem(text)
+        item.setData(Qt.ItemDataRole.UserRole, log_file_id)
+        if tone:
+            item.setForeground(tone_color(tone))
+        if tooltip:
+            item.setToolTip(tooltip)
+        self.file_table.setItem(row, 1, item)
 
     def _browse(self) -> None:
         exts = " ".join(f"*{e}" for e in self.context.settings.import_.log_extensions)
         files, _ = QFileDialog.getOpenFileNames(self, "로그 파일 선택", "", f"로그 파일 ({exts});;모든 파일 (*)")
-        self.add_paths([Path(f) for f in files])
+        if files:
+            self.add_paths([Path(f) for f in files])
 
-    def _show_row(self, row: int) -> None:
+    def _on_current_row(self, row: int) -> None:
         records = self.records()
-        if 0 <= row < len(records):
+        if not 0 <= row < len(records):
+            return
+        if self.views_section.is_expanded():  # 접혀 있으면 이벤트를 읽지 않는다(큰 로그도 목록 넘김이 빠르게)
             self.viewer.show_file(records[row].id)
+        self.current_file_changed.emit(records[row].id)
+
+    def _on_views_toggled(self, expanded: bool) -> None:
+        if not expanded:
+            return
+        current = self.current_file_id()
+        if current is not None and self.viewer.model.log_file_id != current:
+            self.viewer.show_file(current)
+        if self.views.currentIndex() == 1:
+            self.timeline.set_records(self._records)
 
     def _remove_selected(self) -> None:
-        row = self.file_table.currentRow()
-        records = self.records()
-        if 0 <= row < len(records):
-            self.set_log_file_ids([i for i in self._ids if i != records[row].id])
+        current = self.current_file_id()
+        if current is not None:
+            self.removing.emit([current])
+            self.set_log_file_ids([i for i in self._ids if i != current])
 
     def _set_running(self, running: bool) -> None:
-        self.import_button.setEnabled(not running)
         self.cancel_button.setEnabled(running)
         if running:
             self.progress.setRange(0, 0)
@@ -336,7 +409,7 @@ class LogImportPanel(QWidget):
         self._set_running(False)
         self.progress.setRange(0, 1)
         self.progress.setValue(1)
-        self.progress.setFormat("취소함" if result.cancelled else "완료")
+        self.progress.setFormat("취소함" if result.cancelled else "가져오기 완료")
         lines = []
         new = [f for f in result.files if not f.duplicate]
         lines.append(f"가져온 파일 {len(new)}개, 이미 있던 파일 {len(result.files) - len(new)}개, 거부 {len(result.rejected)}개.")
@@ -348,13 +421,10 @@ class LogImportPanel(QWidget):
         if result.cancelled:
             lines.append("취소해서 나머지 파일은 가져오지 않았습니다.")
         self.message_label.setText("\n".join(lines))
-        done_paths = {Path(r.path) for r in result.rejected}
-        if not result.cancelled:
-            self.pending.clear()
-            for path in sorted(done_paths):
-                self.pending.addItem(str(path))
         self.set_log_file_ids(self._ids + result.log_file_ids)
         self.import_finished.emit(result)
+        if self._queue and not result.cancelled:
+            self.start_import()  # 가져오는 동안 더 넣은 파일
 
     def _on_error(self, message: str) -> None:
         self._set_running(False)
@@ -362,3 +432,5 @@ class LogImportPanel(QWidget):
         self.progress.setValue(0)
         self.progress.setFormat("실패")
         self.message_label.setText(f"가져오지 못했습니다: {message}")
+        if self._queue:
+            self.start_import()

@@ -199,3 +199,75 @@ def test_evidence_keys_in_text_are_not_codes() -> None:  # CR-07 실제 모델 �
     assert v4(answer) == []
     wrong = DiagnosisAnswer.model_validate({"observations": [{"text": "TEST-E999가 보인다", "evidence": [event]}]})
     assert v4(wrong)  # 진짜 없는 코드는 여전히 막는다
+
+
+# ── 2026-11-19 실사용: 긴 근거 묶음에서 AI 의견이 검증에 실패(영어 응답·'0005' 같은 키) ──
+def test_context_length_follows_prompt_length() -> None:
+    """num_ctx를 주지 않으면 Ollama 기본 문맥(약 2,000토큰)에 맞춰 시스템 지시가 잘린다."""
+    from app.ai.ollama_client import MAX_CONTEXT, MIN_CONTEXT, OllamaError, context_size
+
+    assert context_size("짧은 글") == MIN_CONTEXT
+    long = context_size("가" * 13_000)
+    assert long > MIN_CONTEXT and long % 1024 == 0 and long >= 13_000 / 1.9 + 2048
+    with pytest.raises(OllamaError):
+        context_size("가" * 30_000)  # 잘려 들어가느니 보내지 않는다
+    fake = FakeOllama([{"text": "a", "kind": "UNKNOWN"}])
+    with fake.client() as client:
+        ask_structured(client, "m", system="s" * 9_000, prompt="p" * 6_000, schema=Answer, package=None)
+    assert MIN_CONTEXT < fake.requests[0]["options"]["num_ctx"] <= MAX_CONTEXT
+
+
+def test_key_guide_lists_only_keys_in_prompt() -> None:
+    from app.ai.diagnosis import key_guide
+
+    package = EvidencePackage()
+    first = package.add("FINDING", "값 범위 이탈 " + "x" * 200)
+    later = package.add("FINDING", "본 적 없는 이벤트 " + "y" * 200)
+    shown = package.shown_keys(300)
+    assert shown == [first]
+    assert "1개는 길이 제한으로 생략" in package.render(300)
+    line = next(x for x in key_guide(package, set(shown)).splitlines() if x.startswith("- observations"))
+    assert first in line and later not in line
+
+
+def test_repair_drops_only_unsupported_items() -> None:
+    from app.ai.diagnosis import DiagnosisAnswer, DiagnosisContext, repair, rules
+
+    package = EvidencePackage()
+    finding = package.add("FINDING", "값 범위 이탈")
+    case = package.add("CASE", "비슷한 정상 사례")
+    step = package.add("RESPONSE", "가상 절차 1")
+    answer = DiagnosisAnswer.model_validate({
+        "observations": [{"text": "값이 범위를 벗어났다", "evidence": [finding]}],
+        "hypotheses": [{"text": "UNKNOWN일 수 있다", "evidence": [case]},
+                       {"text": "근거 없는 추측", "evidence": []},
+                       {"text": "가상 원인일 수 있다", "evidence": [finding]}],
+        "response_plan": [{"text": "보드를 교체한다", "evidence": [finding]}, {"text": "가상 절차 1", "evidence": [step]}],
+        "abnormal_likelihood": 100, "likelihood_reason": "비교할 정상 로그 없음",
+    })
+    ctx = DiagnosisContext(package, "요약")
+    repair(ctx)(answer)
+    assert [h.text for h in answer.hypotheses] == ["가상 원인일 수 있다"]
+    assert [s.text for s in answer.response_plan] == ["가상 절차 1"]
+    assert answer.unknowns == ["근거 없는 추측", "비교할 정상 로그 없음"]
+    assert answer.abnormal_likelihood is None and answer.likelihood_reason == ""
+    assert all(check(answer) == [] for check in rules(ctx))
+
+
+def test_empty_answer_is_rejected() -> None:
+    from app.ai.diagnosis import DiagnosisAnswer, DiagnosisContext, rules
+
+    check = next(r for r in rules(DiagnosisContext(EvidencePackage(), "요약")) if r.__name__ == "v1_empty")
+    assert check(DiagnosisAnswer()) and check(DiagnosisAnswer(unknowns=["근거 부족"])) == []
+
+
+def test_ai_evidence_order_puts_suspicion_and_guidance_first() -> None:
+    from app.analysis.anomaly_detector import Finding
+    from app.analysis.diagnostic_engine import LOW_PRIORITY, _ai_priority
+
+    extra = Finding("DETERMINISTIC", "EXTRA_EVENT", "본 적 없는 이벤트")
+    value = Finding("DETERMINISTIC", "VALUE_OUT_OF_RANGE", "값 범위 이탈", stance="SUPPORTS", severity="SUSPECT")
+    step = Finding("RETRIEVAL", "RESPONSE_REFERENCE", "가상 절차")
+    case = Finding("RETRIEVAL", "SIMILAR_NORMAL_CASE", "비슷한 정상 사례", stance="CONTRADICTS")
+    ordered = sorted([extra, case, step, value], key=_ai_priority)
+    assert ordered == [value, step, case, extra] and _ai_priority(extra) == LOW_PRIORITY

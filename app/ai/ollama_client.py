@@ -24,6 +24,22 @@ class OllamaError(RuntimeError):
     """Ollama 호출 실패. 메시지는 화면에 그대로 보여 줄 수 있는 한국어다."""
 
 
+# 문맥 길이(num_ctx). 주지 않으면 Ollama 기본값(0.40 기준 약 2,000토큰)만 쓰고, 넘는 입력은 앞에서부터 잘라 버린다.
+# 그러면 시스템 지시(규칙·한국어·근거 키 형식)가 사라져 영어 응답·없는 근거 키로 검증에 실패한다(2026-11-19 실사용).
+MIN_CONTEXT = 4096
+MAX_CONTEXT = 16384
+OUTPUT_RESERVE = 2048  # 응답 JSON 몫
+CHARS_PER_TOKEN = 1.5  # 한국어가 섞인 글은 gemma3에서 1토큰에 약 1.9자(실측). 모자라지 않게 작게 잡는다
+
+
+def context_size(*texts: str) -> int:
+    """보낼 글에 맞춘 num_ctx. 1024 단위로 올리고 MIN~MAX 사이로 둔다. MAX를 넘으면 잘리므로 OllamaError."""
+    need = int(sum(len(t) for t in texts) / CHARS_PER_TOKEN) + OUTPUT_RESERVE
+    if need > MAX_CONTEXT:
+        raise OllamaError(f"AI에 보낼 내용이 너무 깁니다(약 {need}토큰, 최대 {MAX_CONTEXT}). 근거를 줄여 다시 시도하세요.")
+    return max(MIN_CONTEXT, -(-need // 1024) * 1024)
+
+
 class OllamaStatus(BaseModel):
     base_url: str
     reachable: bool
@@ -131,14 +147,16 @@ class OllamaClient:
     ) -> str:
         """/api/chat에 JSON 스키마를 지정해 요청하고 응답 문자열을 돌려준다(검증은 response_validator가 한다).
         스트리밍으로 받으며 조각마다 취소를 확인한다. 실패하면 OllamaError.
-        보내기 전에 모델이 로컬 모델인지 확인한다(클라우드 모델이면 보내지 않음)."""
+        보내기 전에 모델이 로컬 모델인지 확인한다(클라우드 모델이면 보내지 않음).
+        문맥 길이는 글 길이에 맞춰 정한다(context_size) — 시스템 지시가 잘리지 않게."""
+        num_ctx = context_size(system, prompt)
         self.ensure_local_model(model)
         body = {
             "model": model,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
             "format": schema,
             "stream": True,
-            "options": {"temperature": 0},
+            "options": {"temperature": 0, "num_ctx": num_ctx},
         }
         chunks: list[str] = []
         try:

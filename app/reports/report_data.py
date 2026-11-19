@@ -11,7 +11,8 @@ from typing import Any
 from app import APP_NAME, __version__
 from app.models import utc_now_iso
 from app.storage.database import Database
-from app.storage.repositories import AnalysisRepository, CaseRepository, LogFileRepository, ModeRepository
+from app.analysis.error_messages import presumed_errors, reference_texts, should_show
+from app.storage.repositories import AnalysisRepository, CaseRepository, EventRepository, LogFileRepository, ModeRepository
 
 AXIS_TEXT = {
     "normal_match": ("정상 패턴 일치", {"MATCH": "일치", "PARTIAL": "일부 일치", "NO_MATCH": "불일치", "NOT_EVALUATED": "판단 못 함"}),
@@ -84,6 +85,16 @@ def load_report(database: Database, run_id: int) -> dict[str, Any]:
         return out
 
     overall = ai_items("AI_HYPOTHESIS", "ABNORMAL_LIKELIHOOD")
+    # CR-11 EM-03: 비정상으로 보인 로그는 예상 에러 메시지(화면과 같은 규칙, 저장된 근거에서 다시 고름)
+    errors = None
+    if should_show(run["anomaly_level"], overall[0]["likelihood"] if overall else None):
+        deterministic = [r for r in rows if r["layer"] == "DETERMINISTIC"]
+        with closing(database.connect()) as conn:
+            raw = {e.id: e.raw_text for e in EventRepository(conn).get_many(
+                [r["event_id"] for r in deterministic if r["event_id"]])}
+        errors = [m.as_dict() for m in presumed_errors(
+            deterministic, {i: r["evidence_key"] for i, r in enumerate(deterministic)}, raw,
+            details=[detail(r) for r in deterministic], references=reference_texts(references))]
 
     return {
         "app": f"{APP_NAME} {__version__}",
@@ -98,6 +109,7 @@ def load_report(database: Database, run_id: int) -> dict[str, Any]:
         "axes": {axis: {"title": title, "value": run[axis], "text": labels.get(run[axis], run[axis])}
                  for axis, (title, labels) in AXIS_TEXT.items()},
         "guidance": {"level": run["response_guidance"], "items": guidance_items, "checks": checks},
+        "errors": errors,  # None이면 비정상으로 보이지 않아 고르지 않음
         "references": references,
         "passages": passages,
         "findings": [{"key": r["evidence_key"], "layer": r["layer"], "type": r["finding_type"], "summary": r["summary"],
@@ -155,6 +167,13 @@ def report_text(data: dict[str, Any]) -> str:
     lines.append("")
     lines.append(f"[권장 대응 — {data['axes']['response_guidance']['text']}]")
     lines += [f"  [{i['label']}] {i['text']}  (출처 {i['case']} · {i['source'] or '-'})" for i in data["guidance"]["items"]]
+    if data.get("errors"):
+        lines.append("")
+        lines.append("[예상 에러 메시지 — 문제로 보이는 원문 줄]")
+        for m in data["errors"]:
+            where = f"{m['line']}행" if m["line"] is not None else "—"
+            lines.append(f"  [{m['group_title']}] {where}  {m['text']}  (이유: {m['reason']})"
+                         + (f"  참고 자료: {m['reference']}" if m.get("reference") else ""))
     if data.get("references"):
         lines.append("")
         lines.append("[참고 자료 — 로그에 나온 코드]")

@@ -2,7 +2,8 @@
 
 화면 코드는 역할 속성만 단다:
   QPushButton[variant="primary"|"danger"], QLabel[role="stamp"][tone=…], QLabel[role="hint"|"warning"|"muted"|"title"],
-  QFrame[role="cell"] (표제란 칸), QToolButton[role="disclosure"] (접는 구역 제목 줄).
+  QFrame[role="cell"] (표제란 칸), QToolButton[role="disclosure"] (접는 구역 제목 줄),
+  QFrame[role="dropzone"][active] (끌어 놓기 칸, CR-10). 표 칸 글자색은 tone_color().
 """
 
 from __future__ import annotations
@@ -150,6 +151,11 @@ QLabel[role="stamp"][tone="bad"] {{ color: {t['bad']}; background: {t['bad_soft'
 QLabel[role="stamp"][tone="info"] {{ color: {t['accent']}; background: {t['accent_soft']}; border: 1px solid {t['accent_line']}; }}
 QLabel[role="stamp"][tone="neutral"] {{ color: {t['neutral']}; background: {t['neutral_soft']}; border: 1px solid {t['neutral_line']}; }}
 
+/* 끌어 놓기 칸 (CR-10 LI-11): 놓으면 바로 가져온다 */
+QFrame[role="dropzone"] {{ background: {t['sunken']}; border: 1px dashed #AEB8C4; border-radius: 8px; }}
+QFrame[role="dropzone"][active="true"] {{ background: {t['accent_soft']}; border: 1px dashed {t['accent']}; }}
+QFrame[role="dropzone"] QLabel {{ background: transparent; color: {t['ink2']}; }}
+
 /* 표제란 칸 */
 QFrame[role="cell"] {{ background: {t['surface']}; border: 1px solid {t['line']}; border-radius: 8px; }}
 QLabel[role="cell-label"] {{ color: {t['ink2']}; font-size: 9.5pt; font-weight: 600; background: transparent; }}
@@ -193,6 +199,11 @@ def set_role(widget: QWidget, role: str | None = None, tone: str | None = None, 
     style.unpolish(widget)
     style.polish(widget)
     return widget
+
+
+def tone_color(tone: str) -> QColor:
+    """표 칸 글자색(ok·warn·bad·info·neutral). 색만으로 말하지 않도록 칸에는 늘 글자가 함께 있다."""
+    return QColor({"ok": T["ok"], "warn": T["warn"], "bad": T["bad"], "info": T["accent"]}.get(tone, T["neutral"]))
 
 
 def mono_font(point: float = 10) -> QFont:

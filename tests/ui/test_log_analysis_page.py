@@ -87,3 +87,110 @@ def test_empty_request_is_explained(qtbot, ctx) -> None:  # noqa: F811
     qtbot.addWidget(page)
     page.start_analysis()
     assert "먼저 올리세요" in page.notes_label.text()
+
+
+def test_each_log_gets_its_own_result(qtbot, ctx, knowledge, tmp_path: Path) -> None:  # noqa: F811  CR-10 NA-20
+    """로그가 여러 개면 로그마다 따로 분석하고, 왼쪽 목록에서 고르면 그 결과를 보인다(드롭다운 없음)."""
+    from tests.logdata import normal_log
+
+    page = LogAnalysisPage(ctx)
+    qtbot.addWidget(page)
+    page.use_ai.setChecked(False)
+    bad, good = load(ctx, [abnormal_log(tmp_path / "bad.log", start_second=60),
+                           normal_log(tmp_path / "good.log", start_second=30)], OriginPurpose.ANALYSIS)
+    page.import_panel.set_log_file_ids([bad, good])
+    assert page.run_button.text() == "분석 실행 (2개)"
+    done = []
+    page.analysis_done.connect(done.append)
+    page.start_analysis()
+    qtbot.waitUntil(lambda: len(done) == 2 and page.run_button.isEnabled(), timeout=20_000)
+    assert done[0].run_id != done[1].run_id  # 분석 이력도 로그마다
+    table = page.import_panel.file_table
+    assert table.item(0, 1).text().startswith("비정상 의심") and table.item(1, 1).text() != "—"
+    assert page.result is done[0] and page.result_title.text().startswith("결과 — bad.log")
+    assert not page.result_hint.isHidden()
+    page.import_panel.select_file(good)  # 목록에서 다른 로그 고르기
+    assert page.result is done[1] and page.result_title.text().startswith("결과 — good.log")
+    assert page.result_log_ids() == [good]
+    assert page.run_button.text() == "모두 다시 분석 (2개)"
+    page.import_panel.select_file(bad)
+    assert page.result is done[0]
+
+
+def test_only_new_logs_are_analyzed_and_case_uses_selected_log(qtbot, ctx, knowledge, tmp_path: Path) -> None:  # noqa: F811
+    from tests.logdata import normal_log
+
+    page = LogAnalysisPage(ctx)
+    qtbot.addWidget(page)
+    page.use_ai.setChecked(False)
+    first = load(ctx, [abnormal_log(tmp_path / "bad.log", start_second=60)], OriginPurpose.ANALYSIS)
+    page.import_panel.set_log_file_ids(first)
+    with qtbot.waitSignal(page.analysis_done, timeout=15_000):
+        page.start_analysis()
+    second = load(ctx, [normal_log(tmp_path / "good.log", start_second=30)], OriginPurpose.ANALYSIS)
+    page.import_panel.set_log_file_ids(first + second)
+    assert page.run_button.text() == "분석 실행"  # 결과 없는 로그 1개만
+    page.import_panel.select_file(second[0])
+    assert page.result is None and "아직 분석하지 않았습니다" in page.guidance_message.text()
+    assert not page.report_button.isEnabled()
+    kept = page.results[first[0]]
+    with qtbot.waitSignal(page.analysis_done, timeout=15_000) as signal:
+        page.start_analysis()
+    assert page.results[first[0]] is kept and page.results[second[0]] is signal.args[0]
+    asked = []
+    page.register_requested.connect(lambda *args: asked.append(args))
+    page.request_case("NORMAL")
+    assert asked[0][1] == second  # 고른 로그의 결과로 등록
+    page.import_panel.clear_list()  # 목록 비우기(LI-12)
+    assert page.results == {} and page.result is None and page.run_button.text() == "분석 실행"
+
+
+def test_same_session_files_are_analyzed_together(qtbot, ctx, knowledge, tmp_path: Path) -> None:  # noqa: F811
+    from app.models.records import SessionMode
+
+    page = LogAnalysisPage(ctx)
+    qtbot.addWidget(page)
+    page.use_ai.setChecked(False)
+    ids = load(ctx, [abnormal_log(tmp_path / "s1.log", start_second=80), abnormal_log(tmp_path / "s2.log", start_second=90)],
+               OriginPurpose.ANALYSIS, SessionMode.SAME)
+    page.import_panel.set_log_file_ids(ids)
+    assert page.analysis_units() == [ids] and page.run_button.text() == "분석 실행"
+    with qtbot.waitSignal(page.analysis_done, timeout=15_000):
+        page.start_analysis()
+    assert page.results[ids[0]] is page.results[ids[1]] and page.result_log_ids() == ids
+    assert "같은 수집 세션" in page.result_title.text()
+
+
+def test_abnormal_log_shows_presumed_error_messages(qtbot, ctx, knowledge, tmp_path: Path) -> None:  # noqa: F811
+    """CR-11 EM-01·03: 비정상으로 보인 로그에는 문제로 보이는 원문 줄을, 정상으로 보인 로그에는 띄우지 않는다."""
+    import json
+
+    from tests.logdata import normal_log
+
+    page = LogAnalysisPage(ctx)
+    qtbot.addWidget(page)
+    page.use_ai.setChecked(False)
+    bad, good = load(ctx, [abnormal_log(tmp_path / "bad.log", start_second=60),
+                           normal_log(tmp_path / "good.log", start_second=30)], OriginPurpose.ANALYSIS)
+    page.import_panel.set_log_file_ids([bad, good])
+    done = []
+    page.analysis_done.connect(done.append)
+    page.start_analysis()
+    qtbot.waitUntil(lambda: len(done) == 2 and page.run_button.isEnabled(), timeout=20_000)
+    assert not page.error_box.isHidden()
+    texts = page.error_box.texts()
+    assert texts[0].startswith("[에러로 기록된 줄] ") and "TEST-FAULT code=TEST-E001" in texts[0]  # 원문 그대로
+    assert "이유: 오류 코드 TEST-E001" in texts[0]
+    assert "예상 에러 메시지" in page.import_panel.file_table.item(0, 1).toolTip()  # 목록 칸 풀이(EM-03)
+    message = page.error_box.messages[0]
+    page.error_box._jump(page.error_box.list.item(0))  # 두 번 누르면 원본 행
+    assert page.import_panel.viewer.selected_event().line_no == message.line
+    rel_json, rel_html = page.save_report()
+    data = json.loads((ctx.paths.root / rel_json).read_text(encoding="utf-8"))
+    assert data["errors"][0]["text"] == message.text and data["errors"][0]["group"] == "ERROR"
+    assert "예상 에러 메시지" in (ctx.paths.root / rel_html).read_text(encoding="utf-8")
+    page.import_panel.select_file(good)
+    if page.result.axes["anomaly_level"] in ("NONE_FOUND", "NOT_EVALUATED"):
+        assert page.error_box.isHidden()  # 비정상으로 보이지 않으면 띄우지 않는다
+        rel_json, _ = page.save_report()
+        assert json.loads((ctx.paths.root / rel_json).read_text(encoding="utf-8"))["errors"] is None

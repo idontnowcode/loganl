@@ -223,6 +223,14 @@ def current_parse(database: Database, records: Sequence[LogFileRecord],
     # 마이그레이션 0007 적용 전에 가져온 로그만 보관한 원본 사본을 지금 파서로 다시 읽어 돌려준다(메모리에서만, 캐시).
     # 이벤트 id는 그 줄을 담은 DB 이벤트의 id. DB는 바꾸지 않는다. 사본을 못 읽으면 저장된 이벤트 그대로.
 
+# app/analysis/error_messages.py (CR-11 EM-01~04)
+def presumed_errors(findings, keys=None, raw_lines=None, details=None, references=None, limit=20) -> list[ErrorMessage]
+    # 결정론 근거(Finding 또는 저장된 근거 행)에서 문제로 보이는 원문 줄을 묶음별로(에러 기록·정상과 다름·
+    # 처음 보는 경고·실패·빠진 메시지). 뜻은 만들지 않고 승인된 참고 자료 글만 붙인다. 화면과 보고서가 같이 쓴다.
+def file_error_candidates(database: Database, log_file_id: int, limit=15) -> list[ErrorMessage]
+    # 정상 로그와 비교하지 않은 한 파일의 후보(에러 레벨·오류 코드, 경고·실패 낱말). 로그 입력 탭.
+def should_show(anomaly_level: str | None, ai_likelihood: int | None) -> bool  # 의심·규칙 위반 또는 AI 50% 이상
+
 # app/analysis/diagnostic_engine.py (P7)
 def run_analysis(run_id: int, cancel: CancelToken) -> AnalysisResult
     # 계층 1 → 계층 2 → (가능하면) 계층 3. 각 계층 결과를 따로 저장한다.

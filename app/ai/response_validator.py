@@ -4,6 +4,7 @@
 - V-2 FACT 항목은 근거 키가 하나 이상
 - V-3 모든 근거 키가 이번 근거 묶음에 있음
 - 추가 규칙(V-4~V-9 등)은 extra_checks로 넣는다.
+- repair가 있으면 검사 전에 규칙에 어긋난 항목만 버린다(정책 V-9 '근거 없는 조치 문장은 버림', V-10과 같은 방식).
 실패하면 한 번 다시 묻고, 그래도 실패하면 VALIDATION_FAILED.
 """
 
@@ -24,6 +25,7 @@ from app.core.evidence_validator import unknown_evidence_keys
 T = TypeVar("T", bound=BaseModel)
 EVIDENCE_FIELDS = ("evidence", "counter_evidence")
 Check = Callable[[Any], list[str]]
+Repair = Callable[[Any], None]  # 검사 전에 응답을 고친다(어긋난 항목 버리기). 새 내용을 만들면 안 된다
 
 
 @dataclass
@@ -54,7 +56,7 @@ def evidence_keys_of(item: BaseModel) -> list[str]:
 
 
 def validate_response(raw: str, schema: type[T], package: EvidencePackage | None = None,
-                      extra_checks: Sequence[Check] = ()) -> ValidationResult[T]:
+                      extra_checks: Sequence[Check] = (), repair: Repair | None = None) -> ValidationResult[T]:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
@@ -63,6 +65,8 @@ def validate_response(raw: str, schema: type[T], package: EvidencePackage | None
         value = schema.model_validate(data)
     except ValidationError as exc:
         return ValidationResult(False, None, [f"V-1: 형식 오류 {e['loc']}: {e['msg']}" for e in exc.errors()[:5]])
+    if repair is not None:  # 규칙에 어긋난 '항목만' 버리거나 판단 불가로 옮긴다. 남은 것은 아래 검사를 모두 받는다
+        repair(value)
 
     errors: list[str] = []
     for item in iter_items(value):
@@ -97,6 +101,7 @@ def ask_structured(
     extra_checks: Sequence[Check] = (),
     cancel: CancelToken = NEVER_CANCEL,
     retries: int = 1,
+    repair: Repair | None = None,
 ) -> StructuredResult[T]:
     if not model:
         return StructuredResult("NO_MODEL", errors=["설정에서 사용할 Ollama 모델을 고르지 않았습니다."])
@@ -111,7 +116,7 @@ def ask_structured(
         except OllamaError as exc:
             return StructuredResult("AI_UNAVAILABLE", errors=[str(exc)], raw=raws)
         raws.append(raw)
-        result = validate_response(raw, schema, package, extra_checks)
+        result = validate_response(raw, schema, package, extra_checks, repair)
         if result.ok:
             return StructuredResult("OK", result.value, [], raws)
         errors = result.errors

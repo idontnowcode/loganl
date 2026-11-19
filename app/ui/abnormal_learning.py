@@ -49,7 +49,7 @@ DECISIONS = (("PROPOSED", "보류"), ("APPROVED", "승인"), ("REJECTED", "거�
 class AbnormalLearningPage(CaseEditorBase):
     case_type = "ABNORMAL"
     purpose = OriginPurpose.ABNORMAL_CASE
-    steps_text = ("진행 순서  ① 왼쪽에 비정상 로그를 넣고 가져오기 → ② 아래 칸에 무슨 일이 있었는지 편하게 적고 'AI로 정리' → "
+    steps_text = ("진행 순서  ① 왼쪽 칸에 비정상 로그를 끌어 놓기(바로 올라옴) → ② 아래 칸에 무슨 일이 있었는지 편하게 적고 'AI로 정리' → "
                   "③ 진단 가이드(필수)·대응 매뉴얼(선택) 첨부 → ④ 빠진 것만 질문에 답하기 → ⑤ '승인'. 입력은 자동 저장됩니다.")
     story_placeholder = ("예) 반복 동작 중 TEST-E001이 뜨고 멈춤. 이 코드가 세 번 넘게 나오면 비정상으로 봄. "
                          "원인은 아직 모름.")

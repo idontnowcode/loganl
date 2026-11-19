@@ -70,18 +70,31 @@ class EvidencePackage:
     def text_blob(self) -> str:
         return "\n".join(item.text for item in self._items.values())
 
-    def render(self, max_chars: int = 12_000) -> str:
-        """프롬프트에 넣을 근거 목록. 길면 뒤쪽을 자르고 자른 개수를 알린다."""
+    def _blocks(self, max_chars: int) -> tuple[list[str], list[str], int]:
+        """(넣을 블록, 넣은 키, 길이 제한으로 뺀 개수). 넣은 순서대로 채우고 넘치면 뒤쪽을 뺀다."""
         parts: list[str] = []
+        shown: list[str] = []
         used = 0
-        for index, item in enumerate(self._items.values()):
+        items = list(self._items.values())
+        for index, item in enumerate(items):
             block = f"{OPEN}{item.key} {item.kind}{CLOSE}\n{escape(item.text)}\n{OPEN}END{CLOSE}"
             if used + len(block) > max_chars and parts:
-                parts.append(f"(근거 {len(self._items) - index}개는 길이 제한으로 생략)")
-                break
+                return parts, shown, len(items) - index
             parts.append(block)
+            shown.append(item.key)
             used += len(block)
+        return parts, shown, 0
+
+    def render(self, max_chars: int = 12_000) -> str:
+        """프롬프트에 넣을 근거 목록. 길면 뒤쪽을 자르고 자른 개수를 알린다(중요한 근거를 먼저 넣을 것)."""
+        parts, _, omitted = self._blocks(max_chars)
+        if omitted:
+            parts.append(f"(근거 {omitted}개는 길이 제한으로 생략)")
         return "\n".join(parts)
+
+    def shown_keys(self, max_chars: int = 12_000) -> list[str]:
+        """render(max_chars)에 실제로 들어가는 근거 키."""
+        return self._blocks(max_chars)[1]
 
     def to_json(self) -> list[dict[str, Any]]:
         return [{"key": i.key, "kind": i.kind, "text": i.text, "ref": i.ref} for i in self._items.values()]

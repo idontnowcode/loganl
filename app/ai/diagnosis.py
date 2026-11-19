@@ -8,6 +8,7 @@ CR-07: 비정상일 가능성과 가설별 가능성(0~100%)을 근거와 함께
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -29,6 +30,9 @@ def code_tokens(text: str) -> list[str]:
 DEFINITIVE = re.compile(r"확실|틀림없|명백|확정적|단정|100\s*%|원인(이다|입니다|임)(?![가-힣])")
 ORDER_WORDS = re.compile(r"먼저|이후|다음에|전에|후에|뒤에|앞서|뒤이어|선행")
 RESPONSE_KINDS = frozenset({"RESPONSE", "GUIDE"})
+# 근거 목록 글자 수. 중요한 근거부터 넣으므로(engine.ai_layer) 넘치면 덜 중요한 '본 적 없는 이벤트'가 빠진다.
+# 사내 PC(CPU)에서 프롬프트 읽는 시간을 줄이려고 14,000자에서 줄였다(2026-11-19).
+EVIDENCE_BUDGET = 10_000
 
 
 class Observation(BaseModel):
@@ -138,21 +142,66 @@ def rules(ctx: DiagnosisContext) -> list:
                 errors.append(f"V-3: 없는 근거 키 {sorted(unknown)}")
         return errors
 
-    return [v4_observations, v5_code_meaning, v6_certainty, v7_order, v8_unsupported, v9_response, v11_likelihood]
+    def v1_empty(answer: DiagnosisAnswer) -> list[str]:
+        # 입력이 잘린 모델이 '{}'만 돌려주면 모든 칸이 기본값이라 검사를 다 통과해 버린다(2026-11-19 재현)
+        filled = (answer.observations or answer.hypotheses or answer.verification_steps or answer.response_plan
+                  or answer.unknowns or answer.abnormal_likelihood is not None)
+        return [] if filled else ["V-1: 빈 응답 — 관측 사실·가설·판단 불가 중 하나는 적어야 함"]
+
+    return [v1_empty, v4_observations, v5_code_meaning, v6_certainty, v7_order, v8_unsupported, v9_response,
+            v11_likelihood]
 
 
-def key_guide(package: EvidencePackage) -> str:
+PLACEHOLDER = re.compile(r"^\s*(UNKNOWN|N/?A|없음|모름|판단\s*불가)", re.IGNORECASE)
+
+
+def repair(ctx: DiagnosisContext) -> Callable[[DiagnosisAnswer], None]:
+    """검사 전에 규칙에 어긋난 항목만 버리거나 판단 불가로 옮긴다. 새 내용·근거를 만들지 않는다.
+    실제 gemma3:4b가 근거가 적은 로그에서 'UNKNOWN일 수 있다' 가설·근거 없는 가능성·근거 없는 조치 문장 하나 때문에
+    응답 전체가 두 번 거부돼 AI 의견이 아예 안 나온 일이 있었다(2026-11-19)."""
+    package = ctx.package
+    blob = package.text_blob()
+
+    def fix(answer: DiagnosisAnswer) -> None:
+        # V-4: 로그 근거를 가리키지 않거나 근거에 없는 코드를 적은 관측 사실은 버린다
+        answer.observations = [obs for obs in answer.observations
+                               if package.kinds_of(obs.evidence) & OBSERVATION_KINDS
+                               and all(token in blob for token in code_tokens(obs.text))]
+        kept = []
+        for hyp in answer.hypotheses:  # V-8: 근거 없는 가설은 판단 불가로. 'UNKNOWN일 수 있다' 같은 자리표시는 버린다
+            if PLACEHOLDER.match(hyp.text):
+                continue
+            if code_tokens(hyp.text) and not package.kinds_of(hyp.evidence) & KNOWLEDGE_KINDS:
+                continue  # V-5: 승인 지식 없이 코드를 말하는 가설은 버린다(판단 불가로 옮기면 지어낸 뜻이 화면에 남음)
+            if hyp.evidence:
+                kept.append(hyp)
+            else:
+                answer.unknowns.append(hyp.text)
+        answer.hypotheses = kept
+        # V-9: 승인된 대응·가이드 근거만 가리키지 않는 조치 문장은 버린다(정책 V-9 '근거 없는 조치 문장은 버림')
+        answer.response_plan = [step for step in answer.response_plan
+                                if (kinds := package.kinds_of(step.evidence)) and kinds <= RESPONSE_KINDS]
+        if answer.abnormal_likelihood is not None and not answer.likelihood_evidence:  # V-11: 근거 없는 가능성은 쓰지 않음
+            if answer.likelihood_reason.strip():
+                answer.unknowns.append(answer.likelihood_reason.strip())
+            answer.abnormal_likelihood, answer.likelihood_reason = None, ""
+
+    return fix
+
+
+def key_guide(package: EvidencePackage, shown: set[str] | None = None) -> str:
     """칸마다 쓸 수 있는 근거 키를 미리 알려 준다. 검증 규칙(V-4·V-5·V-9)은 그대로이고, 작은 모델이
-    대응 문서의 문장을 관측 사실로 옮겨 적는 실수를 줄이려는 것이다."""
+    대응 문서의 문장을 관측 사실로 옮겨 적는 실수를 줄이려는 것이다. shown이 있으면 프롬프트에 실제로 넣은 키만."""
 
     def listing(kinds: frozenset[str]) -> str:
-        keys = package.keys_of(kinds)
+        keys = [k for k in package.keys_of(kinds) if shown is None or k in shown]
         return ", ".join(keys) if keys else "(없음)"
 
-    return ("칸별로 쓸 수 있는 근거 키:\n"
+    return ("칸별로 쓸 수 있는 근거 키(키는 'EV-0001'처럼 앞글자까지 그대로 쓴다):\n"
             f"- observations(로그·결정론 결과에서 본 사실만): {listing(OBSERVATION_KINDS)}\n"
             f"- response_plan(승인된 대응·가이드): {listing(RESPONSE_KINDS)}\n"
             f"- 오류 코드의 뜻을 말하는 가설에 함께 넣을 승인 지식: {listing(KNOWLEDGE_KINDS)}\n"
+            "- likelihood_evidence: 위 근거 목록의 키 아무것이나(비슷한 사례 CASE 키도 된다)\n"
             "대응 문서·가이드의 문장은 observations에 적지 말고 response_plan이나 hypotheses의 근거로만 쓴다.")
 
 
@@ -171,12 +220,16 @@ def diagnose(client: OllamaClient, model: str | None, ctx: DiagnosisContext,
         "가설에서 오류 코드를 언급하려면 그 코드를 다루는 GUIDE·REFERENCE·ANSWER 키를 함께 넣고, 그런 키가 없으면 그 내용은 unknowns에 적는다.\n"
         "7) abnormal_likelihood에는 이 로그가 비정상일 가능성을 0~100 정수로, likelihood_reason에 이유를, likelihood_evidence에 근거 키를 적는다. "
         "비슷한 승인 로그의 사용자 판정·메모·판단 가이드(CASE)와 사용자 답(ANSWER)을 참고한다. "
+        "비교할 비슷한 정상 로그가 없어(normal_match=NO_MATCH) 판단할 수 없으면 abnormal_likelihood는 null로 두고 "
+        "그 이유를 unknowns에 적는다. 비교하지 못한 것은 비정상의 근거가 아니다. "
         "가설마다 likelihood(0~100)를 적되 합이 100을 넘지 않게 하고, 모르는 만큼은 남겨 둔다(판단 불가). 근거가 약하면 낮게 매긴다.\n"
         '형식 예시(키와 문장은 예시일 뿐): {"observations":[{"text":"…","evidence":["EV-0001"]}],'
         '"hypotheses":[{"text":"…일 수 있다","evidence":["EV-0004","EV-0006"],"counter_evidence":[]}],'
         '"verification_steps":[{"text":"…","evidence":[]}],"response_plan":[],"unknowns":["…"],'
         '"abnormal_likelihood":60,"likelihood_reason":"…","likelihood_evidence":["EV-0004"]}'
     )
-    prompt = f"분석 요약:\n{ctx.summary}\n\n{key_guide(ctx.package)}\n\n근거 목록:\n{ctx.package.render(14_000)}"
+    shown = set(ctx.package.shown_keys(EVIDENCE_BUDGET))
+    prompt = (f"분석 요약:\n{ctx.summary}\n\n{key_guide(ctx.package, shown)}\n\n"
+              f"근거 목록:\n{ctx.package.render(EVIDENCE_BUDGET)}")
     return ask_structured(client, model, system=system, prompt=prompt, schema=DiagnosisAnswer, package=ctx.package,
-                          extra_checks=rules(ctx), cancel=cancel)
+                          extra_checks=rules(ctx), cancel=cancel, repair=repair(ctx))

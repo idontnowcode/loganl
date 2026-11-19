@@ -49,6 +49,19 @@ from app.storage.repositories import (
 logger = logging.getLogger("app.analysis")
 ProgressFn = Callable[[int, int, str], None]
 STEPS = 5
+LOW_PRIORITY = 3
+
+
+def _ai_priority(finding: Finding) -> int:
+    """AI 근거 목록에 넣는 순서. 0 이상 쪽 결정론 근거 → 1 승인된 대응·가이드 → 2 사례·참고 자료 → 3 참고용 결정론
+    (본 적 없는 이벤트 등). 근거 키(EV-…)는 저장 순서 그대로이고 프롬프트 안 순서만 바뀐다."""
+    if finding.layer == "DETERMINISTIC" and finding.stance == "SUPPORTS":
+        return 0
+    if finding.finding_type in ("RESPONSE_REFERENCE", "GUIDE_REFERENCE"):
+        return 1
+    if finding.layer == "RETRIEVAL":
+        return 2
+    return LOW_PRIORITY
 
 
 @dataclass
@@ -276,7 +289,10 @@ class DiagnosticEngine:
         event_ids = [f.event_id for f in result.findings if f.event_id]
         with closing(self.database.connect()) as conn:
             raw = {e.id: e.raw_text for e in EventRepository(conn).get_many(event_ids)}
-        for index, finding in enumerate(result.findings):
+        # 중요한 근거부터 넣는다. 프롬프트 길이 제한으로 뒤쪽이 빠질 때 '본 적 없는 이벤트'(참고) 30개가
+        # 값 범위 이탈·대응 근거를 밀어내지 않게 한다(2026-11-19 실사용).
+        for index in sorted(range(len(result.findings)), key=lambda i: _ai_priority(result.findings[i])):
+            finding = result.findings[index]
             key = result.keys[index]
             kind = {"SIMILAR_NORMAL_CASE": "CASE", "SIMILAR_ABNORMAL_CASE": "CASE", "GUIDE_REFERENCE": "GUIDE",
                     "RESPONSE_REFERENCE": "RESPONSE"}.get(finding.finding_type, "FINDING")
@@ -295,7 +311,8 @@ class DiagnosticEngine:
                                 if e.get(name))
                     for e in finding.detail["entries"][:3])
             if finding.event_id in raw:
-                text += f"\n원문({finding.line_start}행): {raw[finding.event_id][:300]}"
+                width = 160 if _ai_priority(finding) == LOW_PRIORITY else 300
+                text += f"\n원문({finding.line_start}행): {raw[finding.event_id][:width]}"
             if kind == "CASE" and finding.case_id in similar_cases:  # CR-07 AO-02: 사용자 판정·메모·판단 가이드
                 text += "\n" + case_knowledge(similar_cases[finding.case_id])
             package.add_with_key(key, kind, text, log_file_id=finding.log_file_id, event_id=finding.event_id,

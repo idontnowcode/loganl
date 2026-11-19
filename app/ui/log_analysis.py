@@ -1,12 +1,16 @@
 """신규 로그 분석 화면 (계획서 §8.4, CR-01). 결과 맨 위에 권장 대응, 그 아래 결과 축·근거·유사 사례·AI 가설.
-근거를 두 번 누르면 원본 로그 행으로 이동한다."""
+근거를 두 번 누르면 원본 로그 행으로 이동한다.
+
+CR-10 NA-20: 로그가 여러 개면 로그마다 따로 분석한다(같은 수집 세션으로 가져온 파일은 함께). 왼쪽 '올라온 로그'
+목록에 로그마다 결과를 적고, 목록에서 로그를 고르면 그 결과를 보인다(드롭다운 없음)."""
 
 from __future__ import annotations
 
 import re
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt, Signal
+import shiboken6
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QFormLayout,
@@ -30,12 +34,14 @@ from PySide6.QtWidgets import (
 
 from app.ai.ollama_client import OllamaClient
 from app.analysis.diagnostic_engine import AnalysisRequest, AnalysisResult, DiagnosticEngine
+from app.analysis.error_messages import ErrorMessage, presumed_errors, reference_texts, should_show
 from app.bootstrap import AppContext
 from app.core.cancel import CancelToken
 from app.learning.intake import IntakeResult, IntakeService
 from app.learning.normal_learner import default_client_factory
 from app.models.enums import OriginPurpose
 from app.ui.case_editor import text_box
+from app.ui.error_messages_box import ErrorMessagesBox
 from app.ui.log_import_panel import LogImportPanel
 from app.ui.natural_input import Collapsible, StoryBox, SummaryRow
 from app.ui.theme import comfortable_table, fit_list_height, scroll_wrap, set_role
@@ -65,6 +71,29 @@ AXIS_TONE = {
 }
 GUIDANCE_TONE = {"MANUAL": "ok", "GUIDE_ONLY": "warn", "NONE": "neutral"}
 GUIDANCE_STAMP = {"MANUAL": "매뉴얼 근거", "GUIDE_ONLY": "가이드만", "NONE": "대응 없음"}
+# 왼쪽 목록 '분석 결과' 칸의 짧은 글(CR-10 NA-20). 자세한 판정은 오른쪽 결과 분류 칸에 있다.
+LEVEL_SHORT = {"NONE_FOUND": "이상 못 찾음", "SUSPECTED": "비정상 의심", "RULE_VIOLATION": "규칙 위반",
+               "NOT_EVALUATED": "판단 못 함"}
+
+
+def ai_likelihood(result: AnalysisResult) -> int | None:
+    answer = getattr(result.ai, "answer", None)
+    return answer.abnormal_likelihood if answer is not None else None
+
+
+def unit_status(result: AnalysisResult, errors: list[ErrorMessage] | None = None) -> tuple[str, str, str]:
+    """목록 칸에 적을 (글, 색조, 풀이). AI 가능성이 있으면 덧붙이고, 풀이에 예상 에러 메시지 앞 줄(CR-11 EM-03)."""
+    level = result.axes.get("anomaly_level", "NOT_EVALUATED")
+    text = LEVEL_SHORT.get(level, level)
+    answer = getattr(result.ai, "answer", None)
+    if answer is not None and answer.abnormal_likelihood is not None:
+        text += f" · AI {answer.abnormal_likelihood}%"
+    tooltip = "\n".join(f"{title}: {labels.get(result.axes[axis], result.axes[axis])}"
+                        for axis, (title, labels) in AXIS_LABELS.items()) + f"\n분석 번호 R-{result.run_id:04d}"
+    if errors:
+        tooltip += "\n예상 에러 메시지:" + "".join(
+            f"\n  {m.line if m.line is not None else '—'}행  {m.text[:90]}" for m in errors[:3])
+    return text, AXIS_TONE["anomaly_level"].get(level, "neutral"), tooltip
 
 
 def section_label(text: str) -> QLabel:
@@ -90,10 +119,15 @@ class LogAnalysisPage(QWidget):
         self.context = context
         self.client_factory = client_factory
         self.runner = TaskRunner(self)
-        self.result: AnalysisResult | None = None
+        self.result: AnalysisResult | None = None  # 지금 오른쪽에 보이는 결과
+        self.results: dict[int, AnalysisResult] = {}  # log_file_id → 그 로그(분석 단위)의 결과 (CR-10 NA-20)
+        self._todo: list[list[int]] = []  # 이번 실행에서 남은 분석 단위
+        self._run_total = 0
         self._cancel: CancelToken | None = None
 
-        self.import_panel = LogImportPanel(context, OriginPurpose.ANALYSIS)
+        self.import_panel = LogImportPanel(context, OriginPurpose.ANALYSIS, status_column="분석 결과", allow_clear=True)
+        self.import_panel.current_file_changed.connect(self._on_file_selected)
+        self.import_panel.files_changed.connect(self._on_files_changed)
 
         self.conditions_edit = text_box(40, "운전 조건 (선택)")
         # CR-05: 상황은 글 한 칸에. 운전 조건 칸은 접어 두고 'AI로 정리'가 글에서 채운다.
@@ -145,6 +179,12 @@ class LogAnalysisPage(QWidget):
         guidance_layout.addWidget(self.guidance_list)
 
         # CR-04: 승인된 참고 자료에 있는 코드가 로그에 나오면 따로 보여 준다(권장 대응과 섞지 않음)
+        # CR-11 EM-01: 비정상으로 보이는 로그는 문제로 보이는 원문 줄을 따로 보인다(뜻은 만들지 않음)
+        self.error_box = ErrorMessagesBox("예상 에러 메시지 — 문제로 보이는 원문 줄 (자동으로 고름 · 두 번 누르면 원본 행)")
+        self.error_box.go_to.connect(lambda log_file_id, line: self.import_panel.show_line(log_file_id, line))
+        self.error_box.hide()
+        self._errors: dict[int, list[ErrorMessage]] = {}  # run_id → 예상 에러 메시지
+
         self.reference_box = QGroupBox("참고 자료 — 로그에 나온 코드 (승인된 참고 자료, 권장 대응과 별개)")
         reference_layout = QVBoxLayout(self.reference_box)
         self.reference_message = QLabel("분석을 실행하면 로그에 나온 코드 중 참고 자료에 있는 것을 보여 줍니다.")
@@ -226,8 +266,20 @@ class LogAnalysisPage(QWidget):
         self.report_label = QLabel()
         self.report_label.setWordWrap(True)
 
+        # CR-10 NA-20: 어느 로그의 결과인지. 다른 로그는 왼쪽 '올라온 로그'에서 고른다
+        self.result_title = QLabel("결과")
+        set_role(self.result_title, "title")
+        self.result_title.setWordWrap(True)
+        self.result_hint = QLabel("왼쪽 '올라온 로그'에서 다른 로그를 고르면 그 로그의 결과가 보입니다.")
+        self.result_hint.setWordWrap(True)
+        set_role(self.result_hint, "muted")
+        self.result_hint.hide()
+
         results = QVBoxLayout()
+        results.addWidget(self.result_title)
+        results.addWidget(self.result_hint)
         results.addWidget(self.guidance_box)
+        results.addWidget(self.error_box)
         results.addWidget(self.reference_box)
         results.addWidget(section_label("결과 분류 (서로 독립된 판정)"))
         results.addLayout(self.axes_row)
@@ -241,8 +293,8 @@ class LogAnalysisPage(QWidget):
         results.addWidget(self.report_label)
         results.addStretch(1)
 
-        steps = QLabel("진행 순서  ① 왼쪽에 분석할 로그를 넣고 가져오기 → ② (선택) 아래 칸에 상황을 편하게 적기 → "
-                       "③ '분석 실행' → ④ 맨 위 '권장 대응'과 근거 확인 → ⑤ 보고서 저장")
+        steps = QLabel("진행 순서  ① 왼쪽 칸에 분석할 로그를 끌어 놓기(여러 개 가능, 바로 올라옴) → ② (선택) 아래 칸에 상황 적기 → "
+                       "③ '분석 실행'(로그마다 따로) → ④ 왼쪽 목록에서 로그를 골라 '권장 대응'과 근거 확인 → ⑤ 보고서 저장")
         steps.setWordWrap(True)
         set_role(steps, "hint")
         side = QVBoxLayout()
@@ -258,6 +310,7 @@ class LogAnalysisPage(QWidget):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setWidgetResizable(True)
         scroll.setWidget(side_widget)
+        self.scroll = scroll
 
         split = QSplitter(Qt.Orientation.Horizontal)
         split.addWidget(scroll_wrap(self.import_panel, horizontal=True))
@@ -269,6 +322,7 @@ class LogAnalysisPage(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.addWidget(split)
         self.refresh_summary()
+        self._update_run_button()
 
     # ── 자유 글 (CR-05) ──
     def refresh_summary(self) -> None:
@@ -305,40 +359,88 @@ class LogAnalysisPage(QWidget):
     def _engine(self) -> DiagnosticEngine:
         return DiagnosticEngine(self.context.database, self.context.paths, self.context.settings, self.client_factory)
 
-    def build_request(self) -> AnalysisRequest:
+    def build_request(self, log_file_ids: list[int] | None = None) -> AnalysisRequest:
         # CR-09: 운전 모드 없이 분석한다(가장 비슷한 승인 정상 로그와 비교)
         return AnalysisRequest(
-            log_file_ids=self.import_panel.log_file_ids(),
+            log_file_ids=list(log_file_ids) if log_file_ids is not None else self.import_panel.log_file_ids(),
             operating_conditions=self.conditions_edit.toPlainText().strip() or None,
             user_description=self.description_edit.toPlainText().strip() or None,
             use_ai=self.use_ai.isChecked(),
         )
 
+    def analysis_units(self) -> list[list[int]]:
+        """CR-10 NA-20: 분석 단위. 같은 수집 세션 파일은 함께(§4.1 시간축), 나머지는 파일마다 따로."""
+        groups: dict[int, list[int]] = {}
+        for record in self.import_panel.records():
+            groups.setdefault(record.session_id, []).append(record.id)
+        return list(groups.values())
+
+    def _units_to_run(self) -> tuple[list[list[int]], bool]:
+        """(이번에 분석할 단위, 모두 다시인지). 결과가 없는 로그만, 모두 있으면 전부 다시."""
+        units = self.analysis_units()
+        fresh = [u for u in units if not all(i in self.results for i in u)]
+        return (fresh, False) if fresh else (units, True)
+
+    def _update_run_button(self) -> None:
+        units, again = self._units_to_run()
+        if not units:
+            self.run_button.setText("분석 실행")
+        elif again:
+            self.run_button.setText(f"모두 다시 분석 ({len(units)}개)")
+        else:
+            self.run_button.setText(f"분석 실행 ({len(units)}개)" if len(units) > 1 else "분석 실행")
+
     # ── 분석 ──
     def start_analysis(self) -> None:
-        request = self.build_request()
-        if not request.log_file_ids:
+        units, _again = self._units_to_run()
+        if not units:
             self.notes_label.setText("분석할 로그를 먼저 올리세요.")
             return
         if self.runner.busy:
             return
+        self._todo = [list(u) for u in units]
+        self._run_total = len(units)
+        for unit in units:
+            for log_file_id in unit:
+                self.results.pop(log_file_id, None)
+                self.import_panel.set_status(log_file_id, "분석 대기", "neutral")
         self._cancel = CancelToken()
         self.run_button.setEnabled(False)
         self.cancel_button.setEnabled(True)
+        self._on_file_selected(self.import_panel.current_file_id())
+        self._run_next()
+
+    def _run_next(self) -> None:
+        if not self._todo:
+            total = self._run_total
+            self._end_run(f"완료 — 로그 {total}개" if total > 1 else
+                          (f"완료 (R-{self.result.run_id:04d})" if self.result else "완료"))
+            return
+        present = set(self.import_panel.log_file_ids())
+        unit = [i for i in self._todo.pop(0) if i in present]  # 분석 중에 목록에서 뺀 로그는 건너뛴다
+        if not unit:
+            self._run_next()
+            return
+        number = self._run_total - len(self._todo)
+        for log_file_id in unit:
+            self.import_panel.set_status(log_file_id, "분석 중…", "info")
         self.progress.setRange(0, 0)
-        self.progress.setFormat("분석 중…")
-        self.runner.start(self._engine().run, request, cancel=self._cancel, on_done=self._on_done,
-                          on_error=self._on_error, on_cancel=self._on_cancel, on_progress=self._on_progress)
+        self.progress.setFormat(f"로그 {number}/{self._run_total} 분석 중…" if self._run_total > 1 else "분석 중…")
+        self.runner.start(self._engine().run, self.build_request(unit), cancel=self._cancel,
+                          on_done=lambda result: self._on_unit_done(unit, result),
+                          on_error=lambda message: self._on_unit_error(unit, message),
+                          on_cancel=self._on_cancel,
+                          on_progress=lambda done, total, message: self._on_progress(done, total, message, number))
 
     def cancel_analysis(self) -> None:
         if self._cancel is not None:
             self._cancel.cancel()
             self.progress.setFormat("취소하는 중…")
 
-    def _on_progress(self, done: int, total: int, message: str) -> None:
+    def _on_progress(self, done: int, total: int, message: str, number: int = 1) -> None:
         self.progress.setRange(0, max(total, 1))
         self.progress.setValue(done)
-        self.progress.setFormat(message)
+        self.progress.setFormat(f"로그 {number}/{self._run_total} · {message}" if self._run_total > 1 else message)
 
     def _end_run(self, text: str) -> None:
         self.run_button.setEnabled(True)
@@ -346,22 +448,127 @@ class LogAnalysisPage(QWidget):
         self.progress.setRange(0, 1)
         self.progress.setValue(1)
         self.progress.setFormat(text)
+        self._update_run_button()
 
     def _on_cancel(self) -> None:
+        waiting = {i for unit in self._todo for i in unit}
+        for log_file_id in self.import_panel.log_file_ids():
+            if log_file_id in waiting:
+                self.import_panel.set_status(log_file_id, "—")  # 시작하지 않은 로그는 분석 전으로
+            elif log_file_id not in self.results:
+                self.import_panel.set_status(log_file_id, "취소함", "neutral")
+        self._todo = []
         self._end_run("취소함")
-        self.notes_label.setText("분석을 취소했습니다. 분석 이력에는 '취소'로 남습니다.")
+        self.notes_label.setText("분석을 취소했습니다. 끝난 로그의 결과는 그대로이고, 분석 이력에는 '취소'로 남습니다.")
 
-    def _on_error(self, message: str) -> None:
-        self._end_run("실패")
-        self.notes_label.setText(f"분석하지 못했습니다: {message}")
+    def _on_unit_error(self, unit: list[int], message: str) -> None:
+        for log_file_id in unit:
+            self.import_panel.set_status(log_file_id, "분석 실패", "bad", message)
+        if self.import_panel.current_file_id() in unit:
+            self.notes_label.setText(f"분석하지 못했습니다: {message}")
+        self._run_next()  # 다른 로그는 이어서 분석한다
 
-    def _on_done(self, result: AnalysisResult) -> None:
-        self._end_run(f"완료 (R-{result.run_id:04d})")
-        self.show_result(result)
+    def _on_unit_done(self, unit: list[int], result: AnalysisResult) -> None:
+        text, tone, tooltip = unit_status(result, self.error_messages(result))
+        if len(unit) > 1:
+            tooltip += f"\n같은 수집 세션 파일 {len(unit)}개를 함께 분석한 결과"
+        present = set(self.import_panel.log_file_ids())
+        for log_file_id in unit:
+            if log_file_id in present:  # 분석 중에 목록에서 뺀 로그의 결과는 이력에만 남는다
+                self.results[log_file_id] = result
+                self.import_panel.set_status(log_file_id, text, tone, tooltip)
+        if self.import_panel.current_file_id() in unit:
+            self.show_result(result)
+            self.reveal_result()
         self.analysis_done.emit(result)
+        self._run_next()
+
+    # ── 목록에서 로그 고르기 (CR-10 NA-20) ──
+    def _on_file_selected(self, log_file_id: int | None) -> None:
+        if log_file_id is None:
+            self.clear_result("왼쪽 칸에 분석할 로그를 끌어 놓으세요.")
+            return
+        result = self.results.get(log_file_id)
+        if result is None:
+            name = self._file_name(log_file_id)
+            busy = self.runner.busy or bool(self._todo)
+            self.clear_result(f"{name}은(는) 분석하는 중입니다. 끝나면 결과가 여기에 보입니다." if busy else
+                              f"{name}은(는) 아직 분석하지 않았습니다. '분석 실행'을 누르세요.", name)
+            self.reveal_result()
+            return
+        if result is not self.result:
+            self.show_result(result)
+        else:
+            self._show_title()
+        self.reveal_result()
+
+    def reveal_result(self) -> None:
+        """오른쪽을 결과 제목까지 내린다. 1366×768에서는 결과가 첫 화면 아래에 있어 고른 뒤 바로 보이게."""
+        def scroll() -> None:
+            if not shiboken6.isValid(self.scroll):  # 그 사이 화면이 닫혔다
+                return
+            top = self.result_title.mapTo(self.scroll.widget(), self.result_title.rect().topLeft()).y()
+            self.scroll.verticalScrollBar().setValue(max(top - 8, 0))
+
+        # 결과를 채운 직후 한 번은 위쪽 '상황 적기' 칸이 잠깐 38px 커졌다 돌아온다(1366×768 실측).
+        # 배치가 자리 잡은 다음 차례에 잰다.
+        QTimer.singleShot(0, lambda: QTimer.singleShot(0, scroll))
+
+    def _on_files_changed(self, ids: list[int]) -> None:
+        present = set(ids)
+        self.results = {k: v for k, v in self.results.items() if k in present}
+        if self.result is not None and not any(r is self.result for r in self.results.values()):
+            self.result = None
+        self.result_hint.setVisible(len(ids) > 1)
+        if not self.runner.busy:
+            self._update_run_button()
+
+    def _file_name(self, log_file_id: int) -> str:
+        return next((r.original_name for r in self.import_panel.records() if r.id == log_file_id), f"로그 {log_file_id}")
+
+    def result_log_ids(self) -> list[int]:
+        """지금 보이는 결과를 낸 분석 단위의 로그(같은 수집 세션이면 여러 개)."""
+        if self.result is None:
+            return []
+        return [i for i in self.import_panel.log_file_ids() if self.results.get(i) is self.result]
+
+    def _show_title(self) -> None:
+        if self.result is None:
+            return
+        names = [self._file_name(i) for i in self.result_log_ids()]
+        head = names[0] if len(names) == 1 else f"{names[0]} 외 {len(names) - 1}개(같은 수집 세션)" if names else "결과"
+        self.result_title.setText(f"결과 — {head} · R-{self.result.run_id:04d}")
+
+    def clear_result(self, message: str = "", name: str | None = None) -> None:
+        """결과 칸을 분석 전 모양으로 되돌린다(고른 로그에 아직 결과가 없을 때)."""
+        self.result = None
+        self.result_title.setText(f"결과 — {name}" if name else "결과")
+        self.guidance_box.setTitle(GUIDANCE_TITLES["NONE"])
+        self.guidance_message.setText(message or "분석을 실행하면 비슷한 승인 사례의 대응 방법을 보여 줍니다.")
+        set_role(self.guidance_stamp, "stamp", "neutral")
+        self.guidance_stamp.setText("분석 전")
+        self.guidance_list.clear()
+        self.guidance_list.hide()
+        self.reference_list.clear()
+        self.reference_list.hide()
+        self.error_box.hide()
+        self.reference_message.setText("분석을 실행하면 로그에 나온 코드 중 참고 자료에 있는 것을 보여 줍니다.")
+        for axis, cell in self.axis_cells.items():
+            cell.setText("—")
+            set_role(cell, "cell-value", "neutral")
+        self.axes_label.clear()
+        self.findings_table.setRowCount(0)
+        self.ai_status.setText("아직 실행하지 않았습니다.")
+        self.ai_likelihood.hide()
+        self.ai_view.clear()
+        self.notes_label.clear()  # 안내는 위 권장 대응 칸에(같은 글을 두 번 보이지 않게)
+        for button in (self.report_button, self.register_normal, self.register_abnormal):
+            button.setEnabled(False)
+        self.report_label.clear()
 
     def show_result(self, result: AnalysisResult) -> None:
         self.result = result
+        self._show_title()
         guidance = result.guidance
         self.guidance_box.setTitle(GUIDANCE_TITLES[guidance.level])
         self.guidance_message.setText(guidance.message)
@@ -378,6 +585,7 @@ class LogAnalysisPage(QWidget):
         fit_list_height(self.guidance_list)  # 절차가 목록 안에서 잘려 보이지 않게(화면 전체가 스크롤된다)
         self.guidance_list.setVisible(self.guidance_list.count() > 0)  # 대응이 없으면 빈 상자를 숨긴다
         self.show_references(result)
+        self.show_errors(result)
 
         set_role(self.guidance_stamp, "stamp", GUIDANCE_TONE[guidance.level])
         self.guidance_stamp.setText(GUIDANCE_STAMP[guidance.level])
@@ -403,6 +611,32 @@ class LogAnalysisPage(QWidget):
         for button in (self.report_button, self.register_normal, self.register_abnormal):
             button.setEnabled(True)
         self.report_label.clear()
+
+    def error_messages(self, result: AnalysisResult) -> list[ErrorMessage]:
+        """CR-11 EM-01·02: 결정론 근거에서 고른 예상 에러 메시지(분석마다 한 번만 만든다)."""
+        if result.run_id not in self._errors:
+            from contextlib import closing
+
+            from app.storage.repositories import EventRepository
+
+            event_ids = [f.event_id for f in result.findings if f.event_id]
+            with closing(self.context.database.connect()) as conn:
+                raw = {e.id: e.raw_text for e in EventRepository(conn).get_many(event_ids)}
+            self._errors[result.run_id] = presumed_errors(result.findings, result.keys, raw,
+                                                          references=reference_texts(result.references))
+        return self._errors[result.run_id]
+
+    def show_errors(self, result: AnalysisResult) -> None:
+        if not should_show(result.axes.get("anomaly_level"), ai_likelihood(result)):
+            self.error_box.hide()  # 비정상으로 보이지 않는 로그에는 띄우지 않는다
+            return
+        messages = self.error_messages(result)
+        titles = list(dict.fromkeys(m.group_title for m in messages))
+        self.error_box.show_messages(
+            messages,
+            f"이 로그에서 문제로 보이는 줄 {len(messages)}개({', '.join(titles)}). 줄은 로그 원문 그대로이고, "
+            "뜻은 승인된 참고 자료에 있을 때만 붙입니다.",
+            "에러로 보이는 줄을 찾지 못했습니다. 아래 근거(빠진 이벤트·흐름 차이)와 AI 의견을 보세요.")
 
     def show_references(self, result: AnalysisResult) -> None:
         from app.reports.report_data import reference_lines
@@ -464,7 +698,7 @@ class LogAnalysisPage(QWidget):
         if self.result is None:
             return
         kind = "정상" if case_type == "NORMAL" else "비정상"
-        self.register_requested.emit(case_type, self.import_panel.log_file_ids(),
+        self.register_requested.emit(case_type, self.result_log_ids() or self.import_panel.log_file_ids(),
                                      f"R-{self.result.run_id:04d}에서 등록한 {kind} 사례")
 
     def show_ai(self, result: AnalysisResult) -> None:

@@ -35,7 +35,7 @@ KIND_LABELS = {"FACT": "관측", "HYPOTHESIS": "추정", "UNKNOWN": "불명"}
 class NormalLearningPage(CaseEditorBase):
     case_type = "NORMAL"
     purpose = OriginPurpose.NORMAL_CASE
-    steps_text = ("진행 순서  ① 왼쪽에 정상 로그를 넣고 가져오기 → ② 아래 칸에 상황과 정상이라고 본 이유를 편하게 적고 "
+    steps_text = ("진행 순서  ① 왼쪽 칸에 정상 로그를 끌어 놓기(바로 올라옴) → ② 아래 칸에 상황과 정상이라고 본 이유를 편하게 적고 "
                   "'AI로 정리' → ③ 빠진 것만 질문에 답하기 → ④ '승인'. 입력은 자동 저장됩니다.")
     story_placeholder = "예) 어제 오후 반복 동작을 돌렸고, 처음부터 끝까지 경고 없이 정상 종료됨. FW 2.3, 기본 구성."
     mode_required = False  # CR-09: 운전 모드로 나누지 않는다
