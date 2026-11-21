@@ -151,6 +151,34 @@ QLabel[role="stamp"][tone="bad"] {{ color: {t['bad']}; background: {t['bad_soft'
 QLabel[role="stamp"][tone="info"] {{ color: {t['accent']}; background: {t['accent_soft']}; border: 1px solid {t['accent_line']}; }}
 QLabel[role="stamp"][tone="neutral"] {{ color: {t['neutral']}; background: {t['neutral_soft']}; border: 1px solid {t['neutral_line']}; }}
 
+/* 왼쪽 메뉴·단계 막대·판정 칸 (CR-12) */
+QFrame[role="nav"] {{ background: {t['surface']}; border: none; border-right: 1px solid {t['line']}; }}
+QLabel[role="nav-group"] {{ color: {t['ink2']}; font-size: 9.5pt; font-weight: 600; padding: 4px 8px 2px 8px;
+                            background: transparent; }}
+QPushButton[role="nav-item"] {{ background: transparent; border: none; border-radius: 6px; padding: 8px 12px;
+                                text-align: left; color: {t['ink']}; }}
+QPushButton[role="nav-item"]:hover {{ background: {t['neutral_soft']}; }}
+QPushButton[role="nav-item"]:checked {{ background: {t['accent_soft']}; color: {t['accent']}; font-weight: 700; }}
+QPushButton[role="nav-item"]:focus {{ border: none; }}
+QPushButton[role="step"] {{ border-radius: 16px; padding: 6px 18px; font-weight: 600; color: {t['ink2']};
+                           background: {t['surface']}; border: 1px solid {t['line_input']}; }}
+QPushButton[role="step"][state="current"] {{ background: {t['accent']}; color: #FFFFFF; border: 1px solid {t['accent']}; }}
+QPushButton[role="step"][state="locked"] {{ color: #9AA2AB; background: {t['sunken']}; border: 1px solid {t['line']}; }}
+QFrame[role="rule"] {{ color: {t['line']}; background: {t['line']}; max-height: 1px; border: none; }}
+QLabel[role="verdict"] {{ font-size: 15pt; font-weight: 700; border-radius: 8px; padding: 12px 18px; }}
+QLabel[role="verdict"][tone="ok"] {{ color: {t['ok']}; background: {t['ok_soft']}; border: 1px solid {t['ok_line']}; }}
+QLabel[role="verdict"][tone="warn"] {{ color: {t['warn']}; background: {t['warn_soft']}; border: 1px solid {t['warn_line']}; }}
+QLabel[role="verdict"][tone="bad"] {{ color: {t['bad']}; background: {t['bad_soft']}; border: 1px solid {t['bad_line']}; }}
+QLabel[role="verdict"][tone="neutral"] {{ color: {t['neutral']}; background: {t['neutral_soft']}; border: 1px solid {t['neutral_line']}; }}
+QLabel[role="verdict"][tone="info"] {{ color: {t['accent']}; background: {t['accent_soft']}; border: 1px solid {t['accent_line']}; }}
+
+/* 예상 에러 메시지 줄 (CR-11·12): 글 상자 줄 목록 */
+QFrame[role="message-rows"] {{ background: {t['surface']}; border: 1px solid {t['line']}; border-radius: 8px; }}
+QLabel[role="message-row"] {{ background: transparent; padding: 7px 10px; border-bottom: 1px solid #F0F2F4; }}
+QLabel[role="message-row"][tone="bad"] {{ color: {t['bad']}; }}
+QLabel[role="message-row"][tone="warn"] {{ color: {t['warn']}; }}
+QLabel[role="message-row"][tone="neutral"] {{ color: {t['neutral']}; }}
+
 /* 끌어 놓기 칸 (CR-10 LI-11): 놓으면 바로 가져온다 */
 QFrame[role="dropzone"] {{ background: {t['sunken']}; border: 1px dashed #AEB8C4; border-radius: 8px; }}
 QFrame[role="dropzone"][active="true"] {{ background: {t['accent_soft']}; border: 1px dashed {t['accent']}; }}

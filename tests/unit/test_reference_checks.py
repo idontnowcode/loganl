@@ -212,3 +212,49 @@ def test_event_present_in_every_reference_is_absent() -> None:  # DT-13
     found = by_kind(check(run(9, worker3=False), refs))
     assert [f.detail["event_type"] for f in found["MISSING_EVENT/absent"]] == ["TEST-W3|TEST-DONE"]
     assert "MISSING_EVENT/absent" not in by_kind(check(run(9, worker3=False), refs[:9]))  # 기준 9개로는 보지 않는다
+
+
+# ── 2026-11-22 CT 유사 세트 오탐: 설정값·다시 세는 번호·횟수가 원래 들쭉날쭉한 이벤트를 '겹침'으로 오해 ──
+def scan_lines(series: list[tuple[str, int]], kvs: tuple[int, ...] = (100, 120, 80, 140)) -> list[tuple]:
+    """가상 촬영 흐름: 촬영(series)마다 설정 kv, 축은 단계(step=1부터 다시), 나선은 회전 줄(TEST-ROT) n번."""
+    out = [("INFO", "TEST-SYS", "TEST-SESSION-START")]
+    for number, (kind, n) in enumerate(series, start=1):
+        kv = kvs[(number - 1) % len(kvs)]
+        out += [("INFO", "TEST-SYS", f"TEST-SERIES-START series={number}"),
+                ("INFO", "TEST-HVG", f"TEST-PREP kv={kv}"), ("INFO", "TEST-HVG", f"TEST-READY kv={kv}")]
+        if kind == "axial":
+            for step in range(1, n + 1):
+                out += [("INFO", "TEST-HVG", f"TEST-EXPOSE series={number} step={step}"),
+                        ("INFO", "TEST-DET", f"TEST-ACQ series={number} step={step}")]
+        else:
+            out.append(("INFO", "TEST-HVG", f"TEST-EXPOSE series={number}"))
+            out += [("INFO", "TEST-DET", f"TEST-ROT series={number}")] * n
+            out.append(("INFO", "TEST-DET", f"TEST-ACQ series={number}"))
+        out.append(("INFO", "TEST-SYS", f"TEST-SERIES-END series={number}"))
+    return out + [("INFO", "TEST-SYS", "TEST-SESSION-END")]
+
+
+def flow_findings(found) -> list:
+    return [f for f in found if f.detail.get("kind") == "flow"]
+
+
+def test_reused_setting_value_is_not_a_duplicate_flow() -> None:
+    refs = references(*[scan_lines([("helical", 5), ("helical", 6), ("helical", 7)]) for _ in range(4)])
+    target = scan_lines([("helical", 5), ("helical", 6), ("helical", 7), ("helical", 6)], kvs=(100, 120, 100, 80))
+    assert flow_findings(check(target, refs)) == []  # kv=100을 두 번 써도 PREP·READY 겹침이 아니다
+
+
+def test_counter_restarting_per_group_is_not_a_duplicate_flow() -> None:
+    refs = references(*[scan_lines([("axial", n)]) for n in (4, 5, 6, 4)])
+    found = check(scan_lines([("axial", 4), ("axial", 5)]), refs)  # 촬영마다 step=1부터 다시
+    assert [f for f in flow_findings(found) if f.detail["field"] == "step"] == []
+
+
+def test_naturally_varying_count_is_not_a_duplicate_but_real_one_is() -> None:
+    refs = references(*[scan_lines([("helical", 4 + i), ("helical", 9 + 2 * i), ("helical", 15 + i)]) for i in range(4)])
+    long_scan = scan_lines([("helical", 5), ("helical", 40), ("helical", 10)])  # 회전 줄은 길이에 따라 원래 다르다
+    assert flow_findings(check(long_scan, refs)) == []
+    doubled = scan_lines([("helical", 5), ("helical", 10), ("helical", 12)])
+    doubled.insert(doubled.index(("INFO", "TEST-DET", "TEST-ACQ series=2")), ("INFO", "TEST-DET", "TEST-ACQ series=2"))
+    found = by_kind(check(doubled, refs))  # 늘 한 번이던 마지막 단계가 두 번 → 여전히 겹침
+    assert [(f.detail["field"], f.detail["values"]) for f in found["REPETITION/flow"]] == [("series", ["2"])]

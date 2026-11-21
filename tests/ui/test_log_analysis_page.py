@@ -183,7 +183,7 @@ def test_abnormal_log_shows_presumed_error_messages(qtbot, ctx, knowledge, tmp_p
     assert "이유: 오류 코드 TEST-E001" in texts[0]
     assert "예상 에러 메시지" in page.import_panel.file_table.item(0, 1).toolTip()  # 목록 칸 풀이(EM-03)
     message = page.error_box.messages[0]
-    page.error_box._jump(page.error_box.list.item(0))  # 두 번 누르면 원본 행
+    assert page.error_box.jump(0)  # 두 번 누르면 원본 행
     assert page.import_panel.viewer.selected_event().line_no == message.line
     rel_json, rel_html = page.save_report()
     data = json.loads((ctx.paths.root / rel_json).read_text(encoding="utf-8"))
@@ -194,3 +194,35 @@ def test_abnormal_log_shows_presumed_error_messages(qtbot, ctx, knowledge, tmp_p
         assert page.error_box.isHidden()  # 비정상으로 보이지 않으면 띄우지 않는다
         rel_json, _ = page.save_report()
         assert json.loads((ctx.paths.root / rel_json).read_text(encoding="utf-8"))["errors"] is None
+
+
+def test_three_steps_lock_move_and_jump(qtbot, ctx, knowledge, tmp_path: Path) -> None:  # noqa: F811  CR-12 ST-02
+    from tests.logdata import normal_log
+
+    page = LogAnalysisPage(ctx)
+    qtbot.addWidget(page)
+    page.use_ai.setChecked(False)
+    assert page.steps.current() == 0 and not page.steps.bar.buttons[1].isEnabled()  # 분석 전에는 ②·③ 잠김
+    assert "분석 실행" in page.steps.bar.buttons[2].toolTip()
+    bad, good = load(ctx, [abnormal_log(tmp_path / "bad.log", start_second=60),
+                           normal_log(tmp_path / "good.log", start_second=30)], OriginPurpose.ANALYSIS)
+    page.import_panel.set_log_file_ids([bad, good])
+    page.import_panel.set_checked(good, False)  # 체크한 로그만 분석
+    assert page.run_button.text() == "분석 실행"
+    with qtbot.waitSignal(page.analysis_done, timeout=15_000):
+        page.start_analysis()
+    assert page.steps.current() == 1 and page.steps.bar.buttons[2].isEnabled()  # 시작하면 ② 분석 결과로
+    assert good not in page.results and page.import_panel.status_of(good)[0] == "—"
+    assert page.result_list.rowCount() == 2 and page.result_list.item(0, 1).text().startswith("비정상 의심")
+    assert page.verdict.text() == "비정상 의심" and page.verdict.property("tone") == "warn"
+    assert "에러로 기록된 줄" in page.evidence_summary.text() and "AI 가능성 없음" in page.evidence_summary.text()
+    assert len(page.error_preview.messages) <= 3 and not page.error_preview.isHidden()
+    assert page.guidance_detail_list.count() == page.guidance_list.count()  # ③에도 권장 대응
+    page.result_list.setCurrentCell(1, 0)  # 목록에서 다른 로그 → 아직 결과 없음
+    assert page.result is None and page.import_panel.current_file_id() == good
+    page.detail_list.setCurrentCell(0, 0)
+    assert page.result is page.results[bad]
+    row = next(i for i, f in enumerate(page.result.findings) if f.finding_type == "EXPLICIT_ERROR")
+    page.steps.go(1)
+    assert page.jump_to_finding(row)  # 근거에서 원본 행 → ③으로 가서 로그 원문을 편다
+    assert page.steps.current() == 2 and page.import_panel.views_section.is_expanded()

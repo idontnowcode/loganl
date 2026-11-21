@@ -232,3 +232,21 @@ def test_settings_dialog_lists_bundled_model_even_when_server_down(qtbot, contex
     assert "test-bundled:4b" in items
     notes = " ".join(label.text() for label in dialog.findChildren(QLabel))
     assert "AI와 함께 시작" in notes
+
+
+def test_side_nav_replaces_tab_bar(qtbot, context, monkeypatch) -> None:  # CR-12 ST-01
+    window = make_window(qtbot, context)
+    assert window.tabs.tabBar().isHidden()
+    nav = window.nav
+    assert [b.text() for b in nav.pages] == ["학습 (로그 입력)", "신규 분석"]
+    assert {"학습 사례", "분석 이력", "참고 자료", "설정"} <= set(nav.actions)
+    nav.pages[1].click()
+    assert window.tabs.currentWidget() is window.analysis_page and nav.pages[1].isChecked()
+    window.entry_page.steps.go(2)
+    window.tabs.setCurrentIndex(0)
+    window.entry_page.analysis_requested.emit()  # 학습 ③ '신규 분석으로'
+    assert window.tabs.currentWidget() is window.analysis_page and not nav.pages[0].isChecked()
+    opened = []
+    monkeypatch.setattr(window, "open_history", lambda: opened.append("이력"))
+    nav.actions["분석 이력"].click()  # 데이터 관리 항목은 지금 대화상자를 연다
+    assert opened == ["이력"]

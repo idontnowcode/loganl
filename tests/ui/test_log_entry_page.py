@@ -31,6 +31,7 @@ def page(qtbot, ctx, tmp_path: Path) -> LogEntryPage:
     widget = LogEntryPage(ctx)
     qtbot.addWidget(widget)
     widget.import_panel.set_log_file_ids(ids)
+    widget.steps.go(1)  # CR-12: 목록·설명 칸은 ② 구분·메모 단계에 있다
     return widget
 
 
@@ -127,6 +128,7 @@ def test_saving_asks_ai_questions_and_answers_are_kept(qtbot, ctx, tmp_path: Pat
         {"kind": "ASK", "text": "TEST-INIT은 어떤 단계인가요?", "evidence": []}]}])
     page = LogEntryPage(ctx, client_factory=fake.factory)
     qtbot.addWidget(page)
+    page.steps.go(2)  # CR-12: AI 질문은 ③ 저장·AI 질문 단계에 있다
     assert page.questions_box.empty.isVisibleTo(page)
     page.import_panel.set_log_file_ids(ids)
     page.abnormal_radio.setChecked(True)
@@ -193,3 +195,13 @@ def test_abnormal_choice_shows_error_lines(page) -> None:  # CR-11 EM-04
     page._on_selection_changed()
     page.abnormal_radio.setChecked(True)
     assert page.error_box.isHidden()  # 여러 개를 고르면 띄우지 않는다
+
+
+def test_entry_steps(page) -> None:  # CR-12 ST-03
+    assert page.steps.current() == 1 and [b.text().split("  ", 1)[1] for b in page.steps.bar.buttons] == [
+        "로그 넣기", "구분·메모", "저장·AI 질문"]
+    page.normal_radio.setChecked(True)
+    page.steps.go(2)  # 단계를 바꾸면 고른 입력은 자동 저장
+    assert page.saved_table.rowCount() == 1
+    page.bring_saved(0)  # 저장된 로그를 두 번 누르면 ②로
+    assert page.steps.current() == 1

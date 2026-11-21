@@ -392,6 +392,51 @@ def _flows(events: Sequence[EventRecord]) -> dict[str, dict[str, list[tuple[str,
     return out
 
 
+def _flow_start(required: set[str], order: list[tuple[str, str]]) -> str | None:
+    """흐름의 시작 이벤트: 정상 로그에서 늘 다른 필수 이벤트보다 먼저 나온 것(없으면 None)."""
+    pairs = set(order)
+    return next((r for r in sorted(required) if all((r, b) in pairs for b in required if b != r)), None)
+
+
+def _episodes(items: list[tuple[str, EventRecord]], start: str | None) -> list[list[tuple[str, EventRecord]]]:
+    """번호 하나의 이벤트를 '한 번의 흐름'으로 나눈다. 시작 이벤트가 다시 나오면 새 흐름이다.
+    같은 값을 다시 쓰는 설정 칸(kv=100을 워밍업과 촬영에서 또 씀), 묶음마다 1부터 다시 세는 칸(촬영마다 step=1…)을
+    한 흐름으로 합쳐 '겹침'으로 오해하지 않게 한다(2026-11-22 CT 유사 세트 오탐). 마지막 단계만 두 번 나오는 진짜 겹침은
+    시작 이벤트가 아니므로 나뉘지 않는다."""
+    if start is None:
+        return [items]
+    out: list[list[tuple[str, EventRecord]]] = []
+    current: list[tuple[str, EventRecord]] = []
+    for name, event in items:
+        if name == start and any(n == start for n, _e in current):
+            out.append(current)
+            current = []
+        current.append((name, event))
+    if current:
+        out.append(current)
+    return out
+
+
+def _learn_flow(files: list[dict[str, list[tuple[str, EventRecord]]]]) -> dict | None:
+    raw = [[name for name, _e in items] for flows in files for items in flows.values()]
+    required = set.intersection(*(set(seq) for seq in raw))
+    order = [(a, b) for a in required for b in required if a != b and all(seq.index(a) < seq.index(b) for seq in raw)]
+    start = _flow_start(required, order)
+    sequences = [[name for name, _e in episode] for flows in files for items in flows.values()
+                 for episode in _episodes(items, start)]
+    required = set.intersection(*(set(seq) for seq in sequences))
+    if len(required) < 2:
+        return None
+    order = [(a, b) for a in required for b in required if a != b
+             and all(seq.index(a) < seq.index(b) for seq in sequences)]
+    # 흐름 하나에 같은 이름이 나온 최대 횟수(가끔 나오는 재시도 같은 이벤트도 포함). 이보다 많으면 겹침.
+    # 정상 로그에서 횟수가 세 가지 이상으로 늘 달랐던 이벤트(회전마다 한 줄 등 길이에 따라 느는 것)는 겹침으로 보지 않는다.
+    names = set().union(*sequences)
+    most = {name: max(seq.count(name) for seq in sequences) for name in names}
+    variable = {name for name in names if len({seq.count(name) for seq in sequences if name in seq}) >= 3}
+    return {"required": required, "most": most, "order": order, "start": start, "variable": variable}
+
+
 def _id_flows(events: Sequence[EventRecord], refs: Sequence[ReferenceFile], detail: dict,
               log_file_id: int) -> list[Finding]:
     """정상 로그에서 같은 번호(job=·blk=·cycle= 등)마다 늘 따라 나온 이벤트 묶음이 있으면, 이 로그의 번호마다
@@ -404,32 +449,29 @@ def _id_flows(events: Sequence[EventRecord], refs: Sequence[ReferenceFile], deta
                  and sum(len(v) for v in flows[key].values()) >= FLOW_MIN_EVENTS_PER_ID * len(flows[key])]
         if len(files) < MIN_REFERENCE_FILES:
             continue
-        sequences = [[name for name, _e in items] for flows in files for items in flows.values()]
-        required = set.intersection(*(set(seq) for seq in sequences))
-        if len(required) < 2:
-            continue
-        # 번호 하나에 같은 이름이 나온 최대 횟수(가끔 나오는 재시도 같은 이벤트도 포함). 이보다 많으면 겹침
-        most = {name: max(seq.count(name) for seq in sequences) for name in set().union(*sequences)}
-        order = [(a, b) for a in required for b in required if a != b
-                 and all(seq.index(a) < seq.index(b) for seq in sequences)]
-        learned[key] = {"required": required, "most": most, "order": order}
+        rule = _learn_flow(files)
+        if rule is not None:
+            learned[key] = rule
     out = []
     target = _flows(events)
     for key, rule in sorted(learned.items()):
         problems: dict[str, list[tuple[str, EventRecord, str]]] = {"MISSING_EVENT": [], "REPETITION": [],
                                                                     "ORDER_VIOLATION": []}
-        for value, items in target.get(key, {}).items():
-            names = [name for name, _e in items]
-            first = items[0][1]
-            lacking = sorted(rule["required"] - set(names))
-            if lacking:
-                problems["MISSING_EVENT"].append((value, first, f"{', '.join(lacking)} 없음"))
-            extra = sorted(n for n in set(names) if n in rule["most"] and names.count(n) > max(rule["most"][n], 1))
-            if extra:
-                problems["REPETITION"].append((value, first, f"{', '.join(extra)} 겹침"))
-            swapped = [(a, b) for a, b in rule["order"] if a in names and b in names and names.index(b) < names.index(a)]
-            if swapped:
-                problems["ORDER_VIOLATION"].append((value, first, f"{swapped[0][1]}이(가) {swapped[0][0]}보다 먼저"))
+        for value, all_items in target.get(key, {}).items():
+            for items in _episodes(all_items, rule["start"]):
+                names = [name for name, _e in items]
+                first = items[0][1]
+                lacking = sorted(rule["required"] - set(names))
+                if lacking:
+                    problems["MISSING_EVENT"].append((value, first, f"{', '.join(lacking)} 없음"))
+                extra = sorted(n for n in set(names) if n in rule["most"] and n not in rule["variable"]
+                               and names.count(n) > max(rule["most"][n], 1))
+                if extra:
+                    problems["REPETITION"].append((value, first, f"{', '.join(extra)} 겹침"))
+                swapped = [(a, b) for a, b in rule["order"] if a in names and b in names
+                           and names.index(b) < names.index(a)]
+                if swapped:
+                    problems["ORDER_VIOLATION"].append((value, first, f"{swapped[0][1]}이(가) {swapped[0][0]}보다 먼저"))
         for kind, items in problems.items():
             if not items:
                 continue

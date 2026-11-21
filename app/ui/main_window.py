@@ -15,6 +15,7 @@ from pathlib import Path
 from PySide6.QtCore import QThreadPool, Qt, QUrl
 from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices
 from PySide6.QtWidgets import (
+    QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
@@ -38,6 +39,7 @@ from app.ui.knowledge_manager import KnowledgeDialog
 from app.ui.log_analysis import LogAnalysisPage
 from app.ui.log_entry import LogEntryPage
 from app.ui.log_import_panel import LogImportPanel
+from app.ui.navigation import SideNav
 from app.ui.reference_manager import ReferenceManagerDialog
 from app.ui.settings_dialog import SettingsDialog
 from app.ui.theme import set_role
@@ -178,6 +180,23 @@ class MainWindow(QMainWindow):
         self.import_panels.append(self.analysis_page.import_panel)
         self.tabs.addTab(self.analysis_page, PLANNED_SCREENS[1].title)
         self.tabs.currentChanged.connect(lambda _i: self.flush_autosave())
+        # CR-12 ST-01: 위 탭 줄 대신 왼쪽 메뉴. 탭 위젯은 화면 묶음으로만 쓴다(자동 저장·시험 연결 그대로).
+        self.tabs.tabBar().hide()
+        self.nav = SideNav()
+        self.nav.add_group("작업")
+        self.nav.add_page("학습 (로그 입력)")
+        self.nav.add_page("신규 분석")
+        self.nav.add_group("데이터 관리")
+        self.nav.add_action("학습 사례", lambda: self.open_case_review())
+        self.nav.add_action("분석 이력", lambda: self.open_history())
+        self.nav.add_action("참고 자료", lambda: self.open_references())
+        self.nav.add_group("설정")
+        self.nav.add_action("설정", lambda: self.open_settings())
+        self.nav.finish()
+        self.nav.page_requested.connect(self.tabs.setCurrentIndex)
+        self.tabs.currentChanged.connect(self.nav.set_current)
+        self.nav.set_current(self.tabs.currentIndex())
+        self.entry_page.analysis_requested.connect(lambda: self.tabs.setCurrentWidget(self.analysis_page))
 
         central = QWidget()
         central_layout = QVBoxLayout(central)
@@ -194,7 +213,13 @@ class MainWindow(QMainWindow):
         banners_layout.addWidget(self.hint_banner)
         central_layout.addWidget(banners)
         self.banners = banners
-        central_layout.addWidget(self.tabs, 1)
+        body = QWidget()
+        body_layout = QHBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(0)
+        body_layout.addWidget(self.nav)
+        body_layout.addWidget(self.tabs, 1)
+        central_layout.addWidget(body, 1)
         self.setCentralWidget(central)
 
         self.menu_actions: dict[str, QAction] = {}

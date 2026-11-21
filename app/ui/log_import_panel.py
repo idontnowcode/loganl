@@ -102,9 +102,11 @@ class LogImportPanel(QWidget):
     import_finished = Signal(object)  # ImportResult (한 번 가져올 때마다)
     current_file_changed = Signal(object)  # 목록에서 고른 log_file_id (없으면 None)
     removing = Signal(list)  # 목록에서 빼기 직전의 log_file_id (로그 입력 탭이 입력을 먼저 저장한다)
+    checks_changed = Signal()  # 체크 칸을 바꿈(CR-12, checkable일 때)
 
     def __init__(self, context: AppContext, purpose: OriginPurpose, parent: QWidget | None = None, *,
-                 status_column: str | None = None, allow_clear: bool = False) -> None:
+                 status_column: str | None = None, allow_clear: bool = False, checkable: bool = False,
+                 compact: bool = False, detach_views: bool = False) -> None:
         super().__init__(parent)
         self.context = context
         self.purpose = purpose
@@ -115,6 +117,8 @@ class LogImportPanel(QWidget):
         self._records: list[LogFileRecord] = []
         self._queue: list[Path] = []  # 가져오는 중에 더 넣은 파일(끝나면 이어서)
         self._status: dict[int, tuple[str, str | None, str | None]] = {}  # id → (글, 색조, 풀이)
+        self.checkable = checkable  # CR-12: 분석할 로그를 체크로 고른다(기본 모두 체크)
+        self._unchecked: set[int] = set()
         self.status_column = status_column
         self.columns = (FILE_COLUMNS[0], status_column, *FILE_COLUMNS[1:]) if status_column else FILE_COLUMNS
 
@@ -159,6 +163,10 @@ class LogImportPanel(QWidget):
         self.file_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.file_table.horizontalHeader().setStretchLastSection(True)
         self.file_table.currentCellChanged.connect(lambda row, *_: self._on_current_row(row))
+        self.file_table.itemChanged.connect(self._on_item_changed)
+        if compact:  # CR-12: 자주 안 보는 열은 숨긴다(파일 정보는 툴팁·원문 보기에)
+            for name in ("인코딩", "타임스탬프", "파서", "역할"):
+                self.file_table.setColumnHidden(self.columns.index(name), True)
         comfortable_table(self.file_table, elide_middle=True)
         self.file_table.setMinimumHeight(220)  # 머리 + 5줄. 많으면 표 안에서 스크롤
         self.files_title = QLabel("올라온 로그")
@@ -213,7 +221,8 @@ class LogImportPanel(QWidget):
         layout.addWidget(self.files_title)
         layout.addWidget(self.file_table, 1)
         layout.addLayout(list_buttons)
-        layout.addWidget(self.views_section)
+        if not detach_views:  # detach_views면 화면이 views_section을 다른 자리(분석 ③)에 둔다
+            layout.addWidget(self.views_section)
 
     # ── 공개 동작 ──
     def add_paths(self, paths: list[Path]) -> None:
@@ -295,6 +304,13 @@ class LogImportPanel(QWidget):
             if record.id == log_file_id:
                 self._fill_status(row, record.id)
 
+    def checked_ids(self) -> list[int]:
+        """체크한 로그(체크 칸이 없으면 모두)."""
+        return [i for i in self._ids if not (self.checkable and i in self._unchecked)]
+
+    def status_of(self, log_file_id: int) -> tuple[str, str | None, str | None]:
+        return self._status.get(log_file_id, ("—", None, None))
+
     def current_file_id(self) -> int | None:
         row = self.file_table.currentRow()
         return self._records[row].id if 0 <= row < len(self._records) else None
@@ -326,6 +342,13 @@ class LogImportPanel(QWidget):
             for column, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
                 item.setData(Qt.ItemDataRole.UserRole, record.id)
+                if column == 0:
+                    item.setToolTip(f"{record.original_name}\n인코딩 {record.encoding or '-'} · 시각 "
+                                    f"{BASIS_LABELS.get(record.timestamp_basis, '-')} · 파서 {record.parser_profile or '-'}")
+                    if self.checkable:
+                        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                        item.setCheckState(Qt.CheckState.Unchecked if record.id in self._unchecked
+                                           else Qt.CheckState.Checked)
                 self.file_table.setItem(row, column, item)
             self._fill_status(row, record.id)
         self.file_table.blockSignals(False)
@@ -378,6 +401,25 @@ class LogImportPanel(QWidget):
         if self.views_section.is_expanded():  # 접혀 있으면 이벤트를 읽지 않는다(큰 로그도 목록 넘김이 빠르게)
             self.viewer.show_file(records[row].id)
         self.current_file_changed.emit(records[row].id)
+
+    def _on_item_changed(self, item: QTableWidgetItem) -> None:
+        if not self.checkable or item.column() != 0:
+            return
+        log_file_id = item.data(Qt.ItemDataRole.UserRole)
+        if log_file_id is None:
+            return
+        before = set(self._unchecked)
+        if item.checkState() == Qt.CheckState.Checked:
+            self._unchecked.discard(log_file_id)
+        else:
+            self._unchecked.add(log_file_id)
+        if before != self._unchecked:
+            self.checks_changed.emit()
+
+    def set_checked(self, log_file_id: int, checked: bool) -> None:
+        for row, record in enumerate(self._records):
+            if record.id == log_file_id:
+                self.file_table.item(row, 0).setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
 
     def _on_views_toggled(self, expanded: bool) -> None:
         if not expanded:

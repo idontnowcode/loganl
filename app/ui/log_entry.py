@@ -41,6 +41,7 @@ from app.ui.ai_questions_box import AiQuestionsBox
 from app.ui.error_messages_box import ErrorMessagesBox
 from app.ui.log_import_panel import LogImportPanel
 from app.ui.natural_input import StatusLine
+from app.ui.navigation import StepPages, nav_row
 from app.ui.theme import comfortable_table, scroll_wrap, set_role
 from app.ui.workers import TaskRunner
 
@@ -57,6 +58,7 @@ class Draft:
 
 class LogEntryPage(QWidget):
     entry_saved = Signal(int)  # case_id
+    analysis_requested = Signal()  # ③에서 '신규 분석으로'(CR-12)
 
     def __init__(self, context: AppContext, client_factory=None, open_detail: Callable[[str, int], None] | None = None,
                  parent: QWidget | None = None) -> None:
@@ -75,7 +77,7 @@ class LogEntryPage(QWidget):
         self._dirty = False
         self._shown_ids: list[int] = []
 
-        self.import_panel = LogImportPanel(context, OriginPurpose.NORMAL_CASE, allow_clear=True)
+        self.import_panel = LogImportPanel(context, OriginPurpose.NORMAL_CASE, allow_clear=True, compact=True)
         self.import_panel.files_changed.connect(lambda _ids: self.refresh_entries())
         # CR-10 LI-12: 목록에서 빼기 전에 정상/비정상을 고른 입력은 저장한다(자동 저장과 같은 규칙)
         self.import_panel.removing.connect(lambda ids: self.autosave(only=list(ids)))
@@ -189,29 +191,71 @@ class LogEntryPage(QWidget):
 
         self.questions_box = AiQuestionsBox(self.answer_question, self.skip_question, self.ask_again)
 
-        side = QVBoxLayout()
-        side.addWidget(steps)
-        side.addWidget(list_box)
-        side.addWidget(editor_box)
-        side.addWidget(self.questions_box)
-        side.addWidget(saved_box)
-        side.addStretch(1)
-        side_widget = QWidget()
-        side_widget.setLayout(side)
-        scroll = QScrollArea()
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(side_widget)
+        # ── CR-12 단계별 화면: ① 로그 넣기 → ② 구분·메모 → ③ 저장·AI 질문 ──
+        steps.setText("로그를 끌어 놓은 뒤 '다음'을 누르세요. 다음 단계에서 로그마다 정상/비정상(필수)과 메모(선택)를 적어 "
+                      "저장하면 바로 학습에 쓰입니다.")
+        to_entries = QPushButton("다음: 구분·메모  ›")
+        set_role(to_entries, variant="primary")
+        to_entries.clicked.connect(lambda: self.steps.go(1))
+        intake = QVBoxLayout()
+        intake.setContentsMargins(0, 0, 4, 0)
+        intake.addWidget(steps)
+        intake.addWidget(self.import_panel, 1)
+        intake.addLayout(nav_row(None, to_entries))
+        step1 = QWidget()
+        step1.setLayout(intake)
 
-        split = QSplitter(Qt.Orientation.Horizontal)
-        split.addWidget(scroll_wrap(self.import_panel, horizontal=True))
-        split.addWidget(scroll)
-        split.setSizes([640, 720])
-        split.setStretchFactor(0, 2)
-        split.setStretchFactor(1, 3)
+        select_all = QPushButton("모두 고르기")
+        select_all.clicked.connect(self.entry_table.selectAll)
+        list_layout.addWidget(select_all, 0, Qt.AlignmentFlag.AlignLeft)
+        back_to_intake = QPushButton("‹  로그 넣기")
+        back_to_intake.clicked.connect(lambda: self.steps.go(0))
+        to_saved = QPushButton("다음: 저장·AI 질문  ›")
+        to_saved.clicked.connect(lambda: self.steps.go(2))
+        right2 = QVBoxLayout()
+        right2.setContentsMargins(0, 0, 0, 0)
+        editor_holder = QWidget()
+        holder_layout = QVBoxLayout(editor_holder)
+        holder_layout.setContentsMargins(0, 0, 0, 0)
+        holder_layout.addWidget(editor_box)
+        holder_layout.addStretch(1)
+        right2.addWidget(scroll_wrap(editor_holder), 1)
+        right2.addLayout(nav_row(back_to_intake, to_saved))
+        right2_widget = QWidget()
+        right2_widget.setLayout(right2)
+        step2 = QSplitter(Qt.Orientation.Horizontal)
+        step2.addWidget(list_box)
+        step2.addWidget(right2_widget)
+        step2.setSizes([520, 700])
+        step2.setChildrenCollapsible(False)
+
+        back_to_entries = QPushButton("‹  구분·메모")
+        back_to_entries.clicked.connect(lambda: self.steps.go(1))
+        to_analysis = QPushButton("신규 분석으로  ›")
+        to_analysis.clicked.connect(self.analysis_requested.emit)
+        done = QVBoxLayout()
+        done.addWidget(self.questions_box)
+        done.addWidget(saved_box)
+        done.addStretch(1)
+        done_widget = QWidget()
+        done_widget.setLayout(done)
+        step3_layout = QVBoxLayout()
+        step3_layout.setContentsMargins(0, 0, 0, 0)
+        step3_layout.addWidget(scroll_wrap(done_widget), 1)
+        step3_layout.addLayout(nav_row(back_to_entries, to_analysis))
+        step3 = QWidget()
+        step3.setLayout(step3_layout)
+
+        self.steps = StepPages("학습 (로그 입력)", "정상·비정상 로그를 저장해 두면 신규 분석이 비교 기준으로 씁니다.",
+                               ("로그 넣기", "구분·메모", "저장·AI 질문"))
+        self.steps.add(step1)
+        self.steps.add(step2)
+        self.steps.add(step3)
+        self.steps.step_changed.connect(lambda _i: self.autosave())  # 단계를 바꾸면 고른 입력은 저장(탭 전환과 같음)
+        self.steps.refresh()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.addWidget(split, 1)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.steps, 1)
 
         self.refresh_entries()
         self.refresh_saved()
@@ -467,6 +511,7 @@ class LogEntryPage(QWidget):
                 entry = self.service.entry(log_file_id)
                 self._drafts[log_file_id] = Draft(label, entry.memo, entry.criteria)
         self.refresh_entries(select=list(log_file_ids))
+        self.steps.go(1)
         self.message.setText("분석한 로그를 올렸습니다. 필요하면 메모를 적고 저장하세요.")
 
     def bring_saved(self, row: int) -> None:
@@ -477,6 +522,7 @@ class LogEntryPage(QWidget):
         if log_file_id not in self.import_panel.log_file_ids():
             self.import_panel.set_log_file_ids(self.import_panel.log_file_ids() + [log_file_id])
         self.refresh_entries(select=[log_file_id])
+        self.steps.go(1)
 
     def open_selected_detail(self) -> None:
         entries = self.selected_entries()
