@@ -250,3 +250,15 @@ def test_side_nav_replaces_tab_bar(qtbot, context, monkeypatch) -> None:  # CR-1
     monkeypatch.setattr(window, "open_history", lambda: opened.append("이력"))
     nav.actions["분석 이력"].click()  # 데이터 관리 항목은 지금 대화상자를 연다
     assert opened == ["이력"]
+
+
+def test_hint_can_be_closed_and_long_path_is_elided(qtbot, context) -> None:  # CR-13 UI-21
+    window = make_window(qtbot, context)
+    window.show()
+    assert not window.hint_banner.isHidden()
+    window.hint_close.click()
+    assert window.hint_banner.isHidden() and window.hint_close.isHidden()
+    window.refresh_hint()  # 다시 칠해도 이번 실행 동안은 숨김
+    assert window.hint_banner.isHidden()
+    assert str(context.paths.root) in window.data_label.text()  # 글은 전체 그대로(그릴 때만 가운데 줄임)
+    assert window.data_label.minimumSizeHint().width() <= 80

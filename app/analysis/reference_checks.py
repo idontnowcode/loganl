@@ -72,7 +72,8 @@ class ReferenceFile:
 
 
 def compare_with_normals(target: FileFeatures, events: Sequence[EventRecord],
-                         references: Sequence[ReferenceFile]) -> list[Finding]:
+                         references: Sequence[ReferenceFile], known_types: set[str] | None = None) -> list[Finding]:
+    """known_types: 저장된 정상 로그 전체의 이벤트 유형(있으면 '정상에 없던 경고'를 그 전체와 비교, DT-18)."""
     refs = [r for r in references if r.features.log_role == target.log_role]
     if len(refs) < MIN_REFERENCE_FILES:
         return []
@@ -80,6 +81,15 @@ def compare_with_normals(target: FileFeatures, events: Sequence[EventRecord],
               "reference_case_ids": sorted({r.case_id for r in refs if r.case_id is not None})}
     stats = [head_stats(r.features) for r in refs]
     tstats = head_stats(target)
+    _NUMERIC_CACHE.clear()
+    try:
+        return _compare(target, events, refs, stats, tstats, detail, known_types)
+    finally:
+        _NUMERIC_CACHE.clear()  # 이벤트 목록을 붙잡아 두지 않는다
+
+
+def _compare(target: FileFeatures, events: Sequence[EventRecord], refs: Sequence[ReferenceFile], stats, tstats,
+             detail: dict, known_types: set[str] | None) -> list[Finding]:
     findings: list[Finding] = []
     findings += _missing(target, tstats, refs, stats, detail)
     findings += _count_excess(target, tstats, refs, stats, detail)
@@ -94,7 +104,54 @@ def compare_with_normals(target: FileFeatures, events: Sequence[EventRecord],
     findings += _gaps(target, events, refs, detail)
     findings += _values(target, events, refs, detail)
     findings += _stuck(events, refs, detail, target.log_file_id)
+    findings += _new_warnings(events, refs, detail, target.log_file_id, known_types or set())
+    findings += _missing_components(target, events, refs, detail)
     return findings
+
+
+# ---------------------------------------------------------------- 정상에 없던 경고·통째로 빠진 구성요소 (CR-13)
+
+def _new_warnings(events: Sequence[EventRecord], refs: Sequence[ReferenceFile], detail: dict,
+                  log_file_id: int, known_types: set[str]) -> list[Finding]:
+    """비슷한 정상 로그 어디에도 없던 경고(WARN) 이벤트(DT-18). 오류 코드 없이 경고 하나만 남는 고장(냉각 대기 등).
+    정상에서도 가끔 나오는 경고(재시도 등)를 잘못 잡지 않게 기준이 10개 이상일 때만 쓴다('통째로 없음'과 같은 기준)."""
+    if len(refs) < ABSENT_MIN_REFERENCE_FILES:
+        return []
+    known = {e.event_type for r in refs for e in r.events} | known_types  # 비교 기준 밖의 정상 로그에 드물게 있던 경고도 앎
+    out: list[Finding] = []
+    seen: set[str] = set()
+    for event in events:
+        if (event.level or "").upper() not in WARNING_LEVELS or event.event_type in known or event.event_type in seen:
+            continue
+        seen.add(event.event_type or "")
+        out.append(Finding(
+            "DETERMINISTIC", "EXTRA_EVENT",
+            f"저장된 정상 로그 어디에도 없던 경고({event.line_no}행): {_first_line(event.message)}",
+            stance="SUPPORTS", severity="SUSPECT", log_file_id=log_file_id, event_id=event.id, line_start=event.line_no,
+            detail={**detail, "kind": "new_warning", "event_type": event.event_type},
+        ))
+    return out[:MAX_PER_KIND]
+
+
+def _missing_components(target: FileFeatures, events: Sequence[EventRecord], refs: Sequence[ReferenceFile],
+                        detail: dict) -> list[Finding]:
+    """비슷한 정상 로그 모두에 2줄 이상씩 있던 구성요소가 이 로그에 한 줄도 없음(DT-19, 작업자·채널 빠짐).
+    이벤트 이름 단위로는 다른 작업자와 이름이 같아 티가 안 나는 경우를 구성요소 단위로 본다. 기준 10개 이상일 때만."""
+    if len(refs) < ABSENT_MIN_REFERENCE_FILES:
+        return []
+    counts = [Counter(e.component for e in r.events if e.component) for r in refs]
+    required = {c for c in counts[0] if all(cnt.get(c, 0) >= 2 for cnt in counts)}
+    present = {e.component for e in events if e.component}
+    out = []
+    for component in sorted(required - present):
+        out.append(Finding(
+            "DETERMINISTIC", "MISSING_EVENT",
+            f"비슷한 정상 로그 {len(refs)}개 모두에 있던 구성요소 {component}의 로그가 이 로그에 한 줄도 없음",
+            stance="SUPPORTS", severity="SUSPECT", log_file_id=target.log_file_id,
+            detail={**detail, "kind": "component_absent", "component": component,
+                    "reference_min_count": min(cnt[component] for cnt in counts)},
+        ))
+    return out[:MAX_PER_KIND]
 
 
 # ---------------------------------------------------------------- 이름 단위 통계
@@ -566,7 +623,19 @@ def _gaps(target: FileFeatures, events: Sequence[EventRecord], refs: Sequence[Re
 
 # ---------------------------------------------------------------- 값 범위
 
+_NUMERIC_CACHE: dict[int, tuple[Sequence[EventRecord], dict]] = {}  # 한 번 비교하는 동안만(값 범위·값 멈춤이 같이 씀)
+
+
 def _numeric_fields(events: Sequence[EventRecord]) -> dict[tuple[str, str], list[tuple[float, EventRecord]]]:
+    cached = _NUMERIC_CACHE.get(id(events))
+    if cached is not None and cached[0] is events:
+        return cached[1]
+    out = _parse_numeric_fields(events)
+    _NUMERIC_CACHE[id(events)] = (events, out)
+    return out
+
+
+def _parse_numeric_fields(events: Sequence[EventRecord]) -> dict[tuple[str, str], list[tuple[float, EventRecord]]]:
     out: dict[tuple[str, str], list[tuple[float, EventRecord]]] = defaultdict(list)
     for event in events:
         key = event.event_type or event.message

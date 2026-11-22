@@ -11,7 +11,7 @@ from collections.abc import Iterable, Sequence
 from typing import Any
 
 from app.models import utc_now_iso
-from app.models.enums import Actor, AuditAction
+from app.models.enums import Actor, AuditAction, EventTimeKind
 from app.models.records import (
     CaseRecord,
     ClaimRecord,
@@ -199,7 +199,10 @@ class EventRepository:
             tuple(log_file_ids),
         )
         for row in rows:
-            record = EventRecord.model_validate(dict(row))
+            # 정상 로그 수십 개(각 1~2만 줄)를 분석마다 읽으므로 검증 없이 만든다(DB에 넣을 때 검증한 값, PF-01)
+            data = dict(row)
+            data["ts_kind"] = EventTimeKind(data["ts_kind"])
+            record = EventRecord.model_construct(**data)
             result[record.log_file_id].append(record)
         return result
 
@@ -228,6 +231,14 @@ class EventRepository:
         rows = self.conn.execute(
             f"SELECT {EVENT_COLUMNS} FROM events WHERE id IN ({placeholders(event_ids)}) ORDER BY log_file_id, seq",
             tuple(event_ids),
+        )
+        return [EventRecord.model_validate(dict(r)) for r in rows]
+
+    def before(self, log_file_id: int, line_no: int, limit: int = 300) -> list[EventRecord]:
+        """이 행보다 앞의 이벤트를 가까운 것부터(CR-13 SQ-01: 오류 줄의 직전 단계·앞 줄)."""
+        rows = self.conn.execute(
+            f"SELECT {EVENT_COLUMNS} FROM events WHERE log_file_id = ? AND line_no < ? ORDER BY line_no DESC, seq DESC LIMIT ?",
+            (log_file_id, line_no, limit),
         )
         return [EventRecord.model_validate(dict(r)) for r in rows]
 

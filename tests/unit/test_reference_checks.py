@@ -258,3 +258,23 @@ def test_naturally_varying_count_is_not_a_duplicate_but_real_one_is() -> None:
     doubled.insert(doubled.index(("INFO", "TEST-DET", "TEST-ACQ series=2")), ("INFO", "TEST-DET", "TEST-ACQ series=2"))
     found = by_kind(check(doubled, refs))  # 늘 한 번이던 마지막 단계가 두 번 → 여전히 겹침
     assert [(f.detail["field"], f.detail["values"]) for f in found["REPETITION/flow"]] == [("series", ["2"])]
+
+
+# ── CR-13: 정상에 없던 경고(DT-18), 통째로 빠진 구성요소(DT-19) — 기준 10개 이상일 때만 ──
+TEN_REFS = tuple(run_lines(2 + i % 4) for i in range(10))
+
+
+def test_new_warning_absent_from_all_references() -> None:
+    lines = run_lines(4)
+    lines.insert(5, ("WARN", "TEST-SUB", "TEST-HEAT-HIGH level=93 wait_s=180"))  # 정상 10개 어디에도 없던 경고
+    found = by_kind(check(lines, references(*TEN_REFS)))
+    assert [f.detail["event_type"] for f in found["EXTRA_EVENT/new_warning"]] == ["TEST-SUB|TEST-HEAT-HIGH level=<N> wait_s=<N>"]
+    assert found["EXTRA_EVENT/new_warning"][0].stance == "SUPPORTS"
+    assert "EXTRA_EVENT/new_warning" not in by_kind(check(lines))  # 기준 4개면 쓰지 않는다(가끔 나오는 경고일 수 있음)
+
+
+def test_component_missing_entirely() -> None:
+    lines = [line for line in run_lines(4) if line[-2] != "TEST-SUB"]  # TEST-SUB 구성요소가 한 줄도 없음
+    found = by_kind(check(lines, references(*TEN_REFS)))
+    assert [f.detail["component"] for f in found["MISSING_EVENT/component_absent"]] == ["TEST-SUB"]
+    assert "MISSING_EVENT/component_absent" not in by_kind(check(run_lines(4), references(*TEN_REFS)))

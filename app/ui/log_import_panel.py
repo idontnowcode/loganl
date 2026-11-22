@@ -64,14 +64,16 @@ class DropZone(QFrame):
         super().__init__(parent)
         self.setAcceptDrops(True)
         set_role(self, "dropzone")
-        self.label = QLabel("로그 파일(TXT·LOG)을 여기로 끌어 놓거나 '파일 추가…'를 누르세요.\n"
-                            "넣으면 바로 가져와 아래 '올라온 로그'에 올라갑니다.")
+        self.label = QLabel("로그 파일(TXT·LOG)이나 폴더를 여기로 끌어 놓거나 '파일 추가…'·'폴더 추가…'를 누르세요.\n"
+                            "넣으면 바로 가져와 아래 '올라온 로그'에 올라갑니다. 폴더는 안의 로그 파일을 모두 넣습니다.")
         self.label.setWordWrap(True)
         self.add_button = QPushButton("파일 추가…")
+        self.folder_button = QPushButton("폴더 추가…")  # CR-13 LI-14
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 10, 12, 10)
         layout.addWidget(self.label, 1)
         layout.addWidget(self.add_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(self.folder_button, 0, Qt.AlignmentFlag.AlignVCenter)
 
     def _set_active(self, active: bool) -> None:
         self.setProperty("active", "true" if active else "false")
@@ -126,6 +128,8 @@ class LogImportPanel(QWidget):
         self.drop_zone.paths_dropped.connect(self.add_paths)
         self.add_button = self.drop_zone.add_button
         self.add_button.clicked.connect(self._browse)
+        self.folder_button = self.drop_zone.folder_button
+        self.folder_button.clicked.connect(self._browse_folder)
 
         self.session_combo = QComboBox()
         for mode, label in SESSION_CHOICES:
@@ -225,9 +229,20 @@ class LogImportPanel(QWidget):
             layout.addWidget(self.views_section)
 
     # ── 공개 동작 ──
+    def expand_folders(self, paths: list[Path]) -> list[Path]:
+        """폴더는 안(하위 폴더 포함)의 로그 확장자 파일로 바꾼다(CR-13 LI-14). 파일은 그대로."""
+        exts = {e.lower() for e in self.context.settings.import_.log_extensions}
+        out: list[Path] = []
+        for path in map(Path, paths):
+            if path.is_dir():
+                out += sorted(p for p in path.rglob("*") if p.is_file() and p.suffix.lower() in exts)
+            else:
+                out.append(path)
+        return out
+
     def add_paths(self, paths: list[Path]) -> None:
-        """넣은 파일을 바로 가져온다. 가져오는 중이면 끝난 뒤 이어서 가져온다."""
-        for path in paths:
+        """넣은 파일을 바로 가져온다. 가져오는 중이면 끝난 뒤 이어서 가져온다. 폴더는 안의 로그 파일을 모두."""
+        for path in self.expand_folders(paths):
             path = Path(path)
             if path not in self._queue:
                 self._queue.append(path)
@@ -247,7 +262,7 @@ class LogImportPanel(QWidget):
         self.files_changed.emit(self.log_file_ids())
 
     def set_import_enabled(self, enabled: bool) -> None:
-        for widget in (self.drop_zone, self.add_button, self.session_combo, self.session_label_edit,
+        for widget in (self.drop_zone, self.add_button, self.folder_button, self.session_combo, self.session_label_edit,
                        self.profile_combo, self.role_edit, self.fw_edit, self.remove_button, self.clear_button):
             widget.setEnabled(enabled)
 
@@ -393,6 +408,11 @@ class LogImportPanel(QWidget):
         files, _ = QFileDialog.getOpenFileNames(self, "로그 파일 선택", "", f"로그 파일 ({exts});;모든 파일 (*)")
         if files:
             self.add_paths([Path(f) for f in files])
+
+    def _browse_folder(self) -> None:
+        folder = QFileDialog.getExistingDirectory(self, "로그 폴더 선택")
+        if folder:
+            self.add_paths([Path(folder)])
 
     def _on_current_row(self, row: int) -> None:
         records = self.records()

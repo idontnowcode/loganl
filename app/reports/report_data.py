@@ -11,7 +11,7 @@ from typing import Any
 from app import APP_NAME, __version__
 from app.models import utc_now_iso
 from app.storage.database import Database
-from app.analysis.error_messages import presumed_errors, reference_texts, should_show
+from app.analysis.error_messages import attach_context, presumed_errors, reference_texts, should_show
 from app.storage.repositories import AnalysisRepository, CaseRepository, EventRepository, LogFileRepository, ModeRepository
 
 AXIS_TEXT = {
@@ -92,9 +92,10 @@ def load_report(database: Database, run_id: int) -> dict[str, Any]:
         with closing(database.connect()) as conn:
             raw = {e.id: e.raw_text for e in EventRepository(conn).get_many(
                 [r["event_id"] for r in deterministic if r["event_id"]])}
-        errors = [m.as_dict() for m in presumed_errors(
-            deterministic, {i: r["evidence_key"] for i, r in enumerate(deterministic)}, raw,
-            details=[detail(r) for r in deterministic], references=reference_texts(references))]
+        picked = presumed_errors(deterministic, {i: r["evidence_key"] for i, r in enumerate(deterministic)}, raw,
+                                 details=[detail(r) for r in deterministic], references=reference_texts(references))
+        attach_context(database, picked)  # CR-13 SQ-01
+        errors = [m.as_dict() for m in picked]
 
     return {
         "app": f"{APP_NAME} {__version__}",
@@ -173,6 +174,7 @@ def report_text(data: dict[str, Any]) -> str:
         for m in data["errors"]:
             where = f"{m['line']}행" if m["line"] is not None else "—"
             lines.append(f"  [{m['group_title']}] {where}  {m['text']}  (이유: {m['reason']})"
+                         + (f"  직전 단계: {m['stage_line']}행 {m['stage']}" if m.get("stage") else "")
                          + (f"  참고 자료: {m['reference']}" if m.get("reference") else ""))
     if data.get("references"):
         lines.append("")

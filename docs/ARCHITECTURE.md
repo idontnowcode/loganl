@@ -230,6 +230,21 @@ def presumed_errors(findings, keys=None, raw_lines=None, details=None, reference
 def file_error_candidates(database: Database, log_file_id: int, limit=15) -> list[ErrorMessage]
     # 정상 로그와 비교하지 않은 한 파일의 후보(에러 레벨·오류 코드, 경고·실패 낱말). 로그 입력 탭.
 def should_show(anomaly_level: str | None, ai_likelihood: int | None) -> bool  # 의심·규칙 위반 또는 AI 50% 이상
+def attach_context(database: Database, messages: Sequence[ErrorMessage]) -> None
+    # CR-13 SQ-01: 메시지마다 직전 단계(가장 가까운 앞쪽 시작 표시 줄)와 앞 3줄 원문(EventRepository.before).
+
+# app/core/feature_extractor.py (CR-13 SQ-01·02)
+STAGE_WORDS  # 단계 시작을 나타내는 일반 낱말(START·BEGIN·ENTER·시작·진입). 장비별 뜻이 아님
+def code_stages(features: FileFeatures) -> dict[str, str | None]  # 오류 코드마다 처음 나온 줄의 직전 단계 이벤트 유형
+
+# app/analysis/case_retriever.py (CR-13 SQ-02)
+def stage_match(input_files, case_files, codes) -> tuple[list[str], list[str]]  # 같은 코드의 (같은 단계, 다른 단계)
+    # compare(): 같은 오류 코드라도 다른 단계면 코드 몫(0.3)을 절반으로. find_similar(seen_types=…)는 본 사례 로그의 유형을 모은다.
+
+# app/learning/normal_learner.py (CR-13 PF-01)
+def case_file_features(database, case_id) -> list[FileFeatures]  # 로그 파일별 특징을 앱이 켜져 있는 동안 기억(DB 파일+id)
+
+# packaging/make_update_zip.py (CR-13 RL-01): 갱신 zip = 안내 글 + exe + _internal (ollama 제외)
 
 # app/analysis/diagnostic_engine.py (P7)
 def run_analysis(run_id: int, cancel: CancelToken) -> AnalysisResult

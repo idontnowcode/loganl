@@ -108,3 +108,27 @@ def test_file_candidates_without_normals(tmp_path: Path) -> None:  # EM-04
         assert file_error_candidates(ctx.database, good) == []
     finally:
         ctx.close()
+
+
+def test_stage_and_context_lines(tmp_path: Path) -> None:  # CR-13 SQ-01
+    from app.analysis.error_messages import ErrorMessage, attach_context
+    from app.bootstrap import initialize
+    from app.core.importer import LogImporter
+    from app.models.enums import OriginPurpose
+    from app.models.records import ImportRequest, SessionMode
+    from tests.logdata import abnormal_log
+
+    ctx = initialize(tmp_path / "home", configure_logging=False)
+    try:
+        bad = LogImporter(ctx.database, ctx.paths, ctx.settings.import_).import_logs(ImportRequest(
+            paths=[abnormal_log(tmp_path / "a.log")], purpose=OriginPurpose.NORMAL_CASE,
+            session_mode=SessionMode.SEPARATE)).log_file_ids[0]
+        candidate = file_error_candidates(ctx.database, bad)[0]  # 4행 TEST-FAULT
+        assert candidate.stage_line == 2 and "TEST-START step=1" in candidate.stage  # 가장 가까운 앞쪽 시작 표시 줄
+        assert len(candidate.context) == 3 and "TEST-INIT value=10" in candidate.context[-1]
+        message = ErrorMessage(group=ERROR, text="x", reason="y", log_file_id=bad, line=4)
+        attach_context(ctx.database, [message])
+        assert message.stage_line == 2 and message.context == candidate.context
+        assert "직전 단계: 2행" in message_line(message)
+    finally:
+        ctx.close()

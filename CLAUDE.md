@@ -27,13 +27,15 @@
 - 2026-11-19 4차: **CR-11** 비정상으로 보인 로그에 '예상 에러 메시지'(문제로 보이는 원문 줄, `analysis/error_messages.py`, 결정론만·뜻은 참고 자료 글 그대로만), 분석 결과·목록 풀이·보고서, 로그 입력 탭은 '비정상'을 고르면 에러 후보 줄. 테스트 723 통과. 2~4차를 **v0.4.1**로 릴리스(갱신 zip = exe + `_internal`).
 - 2026-11-22: CT 유사 가상 샘플 100개(`samples/make_ct_like_samples.py`, 같은 베드 오류가 시퀀스 다섯 위치에서), 그 세트에서 드러난 번호별 흐름 오탐 고침(DT-17, 오탐 11% → 0%, 기존 세트 회귀 그대로). UI 개편용 설명서 `docs/UI_BRIEF.md`(+ `docs/ui_brief_shots/`). 테스트 726 통과.
 - 2026-11-22 2차: **CR-12 단계별 화면**(왼쪽 메뉴 + 작업마다 ①②③, `ui/navigation.py`, 설계 `docs/CR12_단계별_화면_설계.md`). 테스트 731 통과. 11/22 작업(CT 샘플·DT-17·CR-12)을 **v0.5.0**으로 릴리스(갱신 zip = exe + `_internal`).
+- 2026-11-22 3차: **CR-13 개선 묶음** — 예상 에러에 직전 단계·앞 3줄, 같은 코드라도 같은 단계 사례를 먼저(SQ-01·02), 정상에 없던 경고·통째로 빠진 구성요소·짧은 로그 메모(DT-18~20), 실제 크기(정상 1~2만 줄) 분석 속도(PF-01), 폴더째 넣기·구분 미리 정하기(LI-14), 화면 손질(UI-21), `packaging/make_update_zip.py`(RL-01). 테스트 741 통과. 커밋 안 함.
 - 변경 요청 CR-01(대응 매뉴얼·권장 대응), CR-02(디자인), CR-03(무설치), CR-04(참고 자료), CR-05(자연어 입력), CR-06(로그 입력 탭), CR-07(LLM 질문·확률 의견) 반영. 미결 질문 Q1~Q5는 기본값으로 진행(REQUIREMENTS §3).
 - 남은 일: 사내 PC 오프라인 확인·7~8B 모델 평가·실제 로그 샘플로 파서 프로파일 추가(docs/INSTALL.md §1).
 
 ## 실행
 
 - 설치 `uv sync`, 화면 `uv run python main.py`, 점검 `uv run python main.py --check`, 테스트 `uv run pytest`, 실행 파일 `packaging\build.ps1`(AI 동봉 `-OllamaModel gemma3:4b`)
-- 실제 Ollama 시험 `LLA_LIVE_OLLAMA=1`, 성능 시험 `LLA_PERF=1`(약 40초). 기본 테스트에서는 꺼져 있다.
+- 실제 Ollama 시험 `LLA_LIVE_OLLAMA=1`, 성능 시험 `LLA_PERF=1`(약 1분, 가져오기 T-PERF-01·분석 T-PERF-02). 기본 테스트에서는 꺼져 있다.
+- 릴리스: 빌드 전 dist 앱을 CloseMainWindow로 닫기 → `packaginguild.ps1 -OllamaModel gemma3:4b` → `uv run python packaging/make_update_zip.py dist <안내.txt> LocalLogAnalyzer-app-update-v<버전>.zip` → zip 풀어 `--check`(LLA_HOME 스크래치) → 푸시 → `gh release create v<버전>-<YYYYMMDD> <zip> --target <전체 SHA>`(짧은 SHA는 422) → 탐색기로 앱 다시 띄우기.
 - Python 3.11은 uv가 받는다. **Claude 데스크톱 앱 안에서 uv를 돌릴 때는 `UV_PYTHON_INSTALL_DIR=C:/Users/admin/.uv/python`을 준다.** 앱 안에서 `%APPDATA%`에 설치하면 가상화돼 사용자 터미널에서 `.venv`가 깨진다(지금 `.venv`는 이 경로의 Python을 가리킨다).
 - 같은 이유로 Claude 앱 안에서 앱을 직접 실행해 볼 때는 `LLA_HOME`을 스크래치 폴더로 준다. 그러지 않으면 `%LOCALAPPDATA%`에 쓴 데이터가 가상화돼 사용자에게 안 보인다.
 
@@ -45,5 +47,6 @@
 - `QRunnable` 신호 객체는 신호가 도착할 때까지 참조를 들고 있어야 한다(`MainWindow._pending_signals`).
 - 파서 규칙을 바꾸면 예전에 저장한 로그와 이벤트 이름이 달라진다. 비교할 때 다시 읽는 기준은 `app/core/reparse.py`의 `PARSER_CHANGED_MIGRATION`이다. 파서를 크게 바꾼 릴리스에서는 새 마이그레이션 번호로 올리고, 예전 버전 DB로 분석까지 해 본다.
 - **Ollama 요청에는 num_ctx를 꼭 준다**(`ollama_client.context_size`). 빼면 기본 약 2,000토큰에서 입력 앞부분(시스템 지시)이 소리 없이 잘린다. 짧은 시험 입력으로는 안 드러나므로, AI 프롬프트를 바꾸면 근거가 수십 개인 입력으로 실제 모델을 돌려 본다.
+- 정상 로그 특징은 `normal_learner.case_file_features`가 앱이 켜져 있는 동안 기억한다(키 = DB 파일 + log_file_id, 저장된 이벤트는 불변). 이벤트를 바꾸는 코드를 만들면 이 기억도 비워야 한다. 큰 로그는 비교 기준을 이벤트 합계 20만 개 안으로 줄인다(`REFERENCE_EVENT_BUDGET`, 실제 장비 정상 로그 1~2만 줄).
 - `sqlite3` 연결은 `isolation_level=None`이다. 쓰기는 `transaction()` 문맥으로 묶는다.
 - 설정 파일은 항상 부트스트랩 폴더에 있다. `data_root`를 바꿔도 설정 파일은 옮겨지지 않는다(REQUIREMENTS D-1).

@@ -54,13 +54,26 @@ class DraftOutcome:
     claim_ids: list[int] = field(default_factory=list)
 
 
+# 로그 파일별 특징 기억(CR-13 PF-01). 저장된 이벤트는 바뀌지 않으므로(규칙 5) 앱이 켜져 있는 동안 다시 계산하지 않는다.
+# 정상 로그 수십 개(각 1~2만 줄)를 분석마다 모두 읽던 시간을 줄인다. 키에 DB 파일을 넣어 데이터 폴더가 달라도 섞이지 않게.
+_FEATURE_CACHE: dict[tuple[str, int], FileFeatures] = {}
+_FEATURE_CACHE_LIMIT = 400
+
+
 def case_file_features(database: Database, case_id: int) -> list[FileFeatures]:
     with closing(database.connect()) as conn:
         ids = CaseRepository(conn).log_file_ids(case_id)
         records = LogFileRepository(conn).get_many(ids)
-        events = EventRepository(conn).for_files(ids)
-    records, events = current_parse(database, records, events)  # 예전 버전이 읽은 로그는 지금 파서로(DT-16)
-    return [extract(r, events[r.id]) for r in records]
+        db = str(database.db_file)
+        missing = [r.id for r in records if (db, r.id) not in _FEATURE_CACHE]
+        events = EventRepository(conn).for_files(missing)
+    todo = [r for r in records if r.id in events]
+    todo, events = current_parse(database, todo, events)  # 예전 버전이 읽은 로그는 지금 파서로(DT-16)
+    for record in todo:
+        if len(_FEATURE_CACHE) >= _FEATURE_CACHE_LIMIT:
+            _FEATURE_CACHE.pop(next(iter(_FEATURE_CACHE)))  # 가장 오래 기억한 것부터
+        _FEATURE_CACHE[(db, record.id)] = extract(record, events[record.id])
+    return [_FEATURE_CACHE[(db, r.id)] for r in records]
 
 
 def build_package(features: list[FileFeatures], package: EvidencePackage | None = None) -> tuple[EvidencePackage, str]:

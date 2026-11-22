@@ -205,3 +205,15 @@ def test_entry_steps(page) -> None:  # CR-12 ST-03
     assert page.saved_table.rowCount() == 1
     page.bring_saved(0)  # 저장된 로그를 두 번 누르면 ②로
     assert page.steps.current() == 1
+
+
+def test_preset_label_marks_new_logs(qtbot, ctx, tmp_path: Path) -> None:  # CR-13 LI-14
+    page = LogEntryPage(ctx)
+    qtbot.addWidget(page)
+    page.preset_normal.setChecked(True)
+    with qtbot.waitSignal(page.import_panel.import_finished, timeout=10_000):
+        page.import_panel.add_paths([normal_log(tmp_path / "p1.log"), normal_log(tmp_path / "p2.log", start_second=9)])
+    assert [r[1] for r in rows(page)] == ["정상", "정상"] and all(r[3] == "입력 중 (저장 전)" for r in rows(page))
+    assert "'정상'(으)로 표시" in page.message.text()
+    page.steps.go(2)  # 단계를 넘기면 자동 저장
+    assert page.saved_table.rowCount() == 2

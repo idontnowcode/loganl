@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtCore import QThreadPool, Qt, QUrl
-from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices
+from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QPainter
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -142,6 +142,20 @@ class PlaceholderPage(QWidget):
             layout.addWidget(scroll)
 
 
+class ElidedLabel(QLabel):
+    """긴 글(데이터 폴더 경로)은 가운데를 줄여 그린다. text()·툴팁은 전체 글 그대로(CR-13 UI-21)."""
+
+    def paintEvent(self, event) -> None:  # noqa: N802 (Qt 이름 그대로)
+        painter = QPainter(self)
+        shown = self.fontMetrics().elidedText(self.text(), Qt.TextElideMode.ElideMiddle, self.contentsRect().width())
+        painter.drawText(self.contentsRect(), int(self.alignment() | Qt.AlignmentFlag.AlignVCenter), shown)
+
+    def minimumSizeHint(self):  # noqa: N802
+        hint = super().minimumSizeHint()
+        hint.setWidth(80)
+        return hint
+
+
 class MainWindow(QMainWindow):
     def __init__(
         self,
@@ -210,7 +224,17 @@ class MainWindow(QMainWindow):
         banners_layout.setContentsMargins(12, 8, 12, 4)
         banners_layout.setSpacing(6)
         banners_layout.addWidget(self.warning_banner)
-        banners_layout.addWidget(self.hint_banner)
+        # CR-13 UI-21: 첫 실행 안내 띠는 닫을 수 있다(이번 실행 동안 숨김)
+        self._hint_dismissed = False
+        self.hint_close = QToolButton()
+        self.hint_close.setText("닫기")
+        self.hint_close.setToolTip("이 안내를 이번에는 숨깁니다.")
+        self.hint_close.clicked.connect(self.dismiss_hint)
+        hint_row = QHBoxLayout()
+        hint_row.setSpacing(6)
+        hint_row.addWidget(self.hint_banner, 1)
+        hint_row.addWidget(self.hint_close, 0, Qt.AlignmentFlag.AlignTop)
+        banners_layout.addLayout(hint_row)
         central_layout.addWidget(banners)
         self.banners = banners
         body = QWidget()
@@ -275,7 +299,7 @@ class MainWindow(QMainWindow):
     # ── 상태 표시줄 ──
     def _build_status_bar(self) -> None:
         bar = self.statusBar()
-        self.data_label = QLabel(f"데이터: {self.context.paths.root}")
+        self.data_label = ElidedLabel(f"데이터: {self.context.paths.root}")
         self.data_label.setToolTip(str(self.context.paths.root))
         caps = self.context.capabilities
         fts = "FTS5 사용 가능" if caps.fts5 else "FTS5 없음"
@@ -447,10 +471,15 @@ class MainWindow(QMainWindow):
             ". 자세한 방법은 '도움말 → 사용 가이드'(F1), 연습 파일은 '도움말 → 연습용 예제 폴더'에 있습니다."
 
     def refresh_hint(self) -> None:
-        hint = self.first_run_hint()
+        hint = "" if self._hint_dismissed else self.first_run_hint()
         self.hint_banner.setText(hint)
         self.hint_banner.setVisible(bool(hint))
+        self.hint_close.setVisible(bool(hint))
         self.banners.setVisible(bool(hint) or not self.warning_banner.isHidden())
+
+    def dismiss_hint(self) -> None:
+        self._hint_dismissed = True
+        self.refresh_hint()
 
     # ── 종료 ──
     def flush_autosave(self) -> None:

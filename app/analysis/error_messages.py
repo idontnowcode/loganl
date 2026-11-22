@@ -15,7 +15,7 @@ from contextlib import closing
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.core.feature_extractor import ERROR_LEVELS
+from app.core.feature_extractor import ERROR_LEVELS, STAGE_LOOKBACK, is_stage
 from app.storage.database import Database
 from app.storage.repositories import EventRepository
 
@@ -52,6 +52,9 @@ class ErrorMessage:
     code: str | None = None
     reference: str | None = None  # 승인된 참고 자료 글 그대로
     reasons: list[str] = field(default_factory=list)  # 같은 줄을 가리킨 다른 근거
+    stage: str | None = None  # 직전 단계 줄 원문(CR-13 SQ-01)
+    stage_line: int | None = None
+    context: list[str] = field(default_factory=list)  # 앞 3줄 원문(가까운 것이 아래)
 
     @property
     def group_title(self) -> str:
@@ -60,7 +63,8 @@ class ErrorMessage:
     def as_dict(self) -> dict[str, Any]:
         return {"group": self.group, "group_title": self.group_title, "text": self.text, "reason": self.reason,
                 "file_id": self.log_file_id, "line": self.line, "count": self.count, "key": self.key,
-                "code": self.code, "reference": self.reference, "more_reasons": self.reasons}
+                "code": self.code, "reference": self.reference, "more_reasons": self.reasons,
+                "stage": self.stage, "stage_line": self.stage_line, "context": self.context}
 
 
 def should_show(anomaly_level: str | None, ai_likelihood: int | None) -> bool:
@@ -103,7 +107,7 @@ def presumed_errors(findings: Sequence[Any], keys: Mapping[int, str] | None = No
             group = ERROR
         elif kind in DIFFERENT_TYPES and _get(finding, "stance") == "SUPPORTS":
             group = DIFFERENT if event_id is not None else MISSING
-        elif kind == "EXTRA_EVENT" and FAIL_WORDS.search(raw or summary):
+        elif kind == "EXTRA_EVENT" and (_get(finding, "stance") == "SUPPORTS" or FAIL_WORDS.search(raw or summary)):
             group = NEW_WARNING
         else:
             continue
@@ -122,6 +126,24 @@ def presumed_errors(findings: Sequence[Any], keys: Mapping[int, str] | None = No
             key=keys.get(index), code=code, reference=references.get(code) if code else None)
     ordered = sorted(picked.values(), key=lambda m: (GROUP_ORDER[m.group], m.line if m.line is not None else 1 << 30))
     return ordered[:limit]
+
+
+CONTEXT_LINES = 3
+
+
+def attach_context(database: Database, messages: Sequence[ErrorMessage]) -> None:
+    """원본 행이 있는 메시지마다 직전 단계(가장 가까운 앞쪽 시작 표시 줄)와 앞 3줄을 원문 그대로 붙인다(SQ-01)."""
+    with closing(database.connect()) as conn:
+        repo = EventRepository(conn)
+        for message in messages:
+            if message.log_file_id is None or message.line is None:
+                continue
+            before = repo.before(message.log_file_id, message.line, STAGE_LOOKBACK)
+            message.context = [_first_line(e.raw_text) or _first_line(e.message) for e in before[:CONTEXT_LINES]][::-1]
+            stage = next((e for e in before if is_stage(e.event_type) or is_stage(e.message)), None)
+            if stage is not None:
+                message.stage = _first_line(stage.raw_text) or _first_line(stage.message)
+                message.stage_line = stage.line_no
 
 
 def reference_texts(matches: Iterable[Any]) -> dict[str, str]:
@@ -145,7 +167,11 @@ def file_error_candidates(database: Database, log_file_id: int, limit: int = 15)
     with closing(database.connect()) as conn:
         events = EventRepository(conn).for_files([log_file_id]).get(log_file_id, [])
     picked: dict[str, ErrorMessage] = {}
-    for event in events:
+    stage = None  # 직전 단계 이벤트(SQ-01)
+    for index, event in enumerate(events):
+        previous = events[index - 1] if index else None
+        if previous is not None and (is_stage(previous.event_type) or is_stage(previous.message)):
+            stage = previous
         level = (event.level or "").upper()
         raw = _first_line(event.raw_text) or _first_line(event.message)
         if level in ERROR_LEVELS or event.error_code:
@@ -160,8 +186,12 @@ def file_error_candidates(database: Database, log_file_id: int, limit: int = 15)
         if name in picked:
             picked[name].count = (picked[name].count or 1) + 1
             continue
-        picked[name] = ErrorMessage(group=group, text=raw, reason=reason, log_file_id=log_file_id,
-                                    line=event.line_no, count=1, code=event.error_code)
+        picked[name] = ErrorMessage(
+            group=group, text=raw, reason=reason, log_file_id=log_file_id, line=event.line_no, count=1,
+            code=event.error_code, context=[_first_line(e.raw_text) or _first_line(e.message)
+                                            for e in events[max(0, index - CONTEXT_LINES):index]],
+            stage=(_first_line(stage.raw_text) or _first_line(stage.message)) if stage else None,
+            stage_line=stage.line_no if stage else None)
     ordered = sorted(picked.values(), key=lambda m: (GROUP_ORDER[m.group], m.line or 0))
     return ordered[:limit]
 
@@ -171,5 +201,6 @@ def message_line(message: ErrorMessage) -> str:
     where = f"{message.line}행" if message.line is not None else "—"
     times = f" ×{message.count}" if message.count and message.count > 1 else ""
     head = f"[{message.group_title}] {where}{times}  {message.text}"
-    tail = f"\n    이유: {message.reason}" + (f"\n    참고 자료: {message.reference}" if message.reference else "")
+    tail = (f"\n    직전 단계: {message.stage_line}행 {message.stage}" if message.stage else "") + \
+        f"\n    이유: {message.reason}" + (f"\n    참고 자료: {message.reference}" if message.reference else "")
     return head + tail

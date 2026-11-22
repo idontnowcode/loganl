@@ -10,7 +10,7 @@ import re
 from collections.abc import Callable
 
 import shiboken6
-from PySide6.QtCore import QEvent, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QRect, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QFormLayout,
@@ -35,7 +35,7 @@ from PySide6.QtWidgets import (
 
 from app.ai.ollama_client import OllamaClient
 from app.analysis.diagnostic_engine import AnalysisRequest, AnalysisResult, DiagnosticEngine
-from app.analysis.error_messages import ErrorMessage, presumed_errors, reference_texts, should_show
+from app.analysis.error_messages import ErrorMessage, attach_context, presumed_errors, reference_texts, should_show
 from app.bootstrap import AppContext
 from app.core.cancel import CancelToken
 from app.learning.intake import IntakeResult, IntakeService
@@ -366,6 +366,10 @@ class LogAnalysisPage(QWidget):
         self.guidance_detail = QGroupBox(GUIDANCE_TITLES["NONE"])
         self.guidance_detail_list = QListWidget()
         self.guidance_detail_list.setWordWrap(True)
+        self.guidance_detail_list.setTextElideMode(Qt.TextElideMode.ElideNone)
+        self.guidance_list.setTextElideMode(Qt.TextElideMode.ElideNone)
+        self.guidance_list.installEventFilter(self)
+        self.guidance_detail_list.installEventFilter(self)
         QVBoxLayout(self.guidance_detail).addWidget(self.guidance_detail_list)
         findings = QWidget()
         findings_layout = QVBoxLayout(findings)
@@ -423,7 +427,24 @@ class LogAnalysisPage(QWidget):
     def eventFilter(self, watched, event) -> bool:  # noqa: N802 (Qt 이름 그대로)
         if watched is getattr(self, "result_scroll", None) and event.type() == QEvent.Type.Resize:
             self._arrange_cards(watched.width() >= self.WIDE_RESULT)
+        elif event.type() == QEvent.Type.Resize and watched in (getattr(self, "guidance_list", None),
+                                                                getattr(self, "guidance_detail_list", None)):
+            self._fit_guidance()
         return super().eventFilter(watched, event)
+
+    def _fit_guidance(self) -> None:
+        """권장 대응 목록 높이를 줄바꿈까지 글 높이로 잰다(목록 위젯 줄 높이는 너비가 바뀌면 안 맞음, CR-13 UI-21)."""
+        for view in (self.guidance_list, self.guidance_detail_list):
+            if not view.count():
+                continue
+            view.doItemsLayout()
+            metrics = view.fontMetrics()
+            width = max(view.viewport().width() - 40, 120)
+            rows = sum(metrics.boundingRect(QRect(0, 0, width, 100_000), Qt.TextFlag.TextWordWrap,
+                                            view.item(i).text()).height() + 16 for i in range(view.count()))
+            height = max(rows + 2 * view.frameWidth() + 4, 48)
+            if view.minimumHeight() != height or view.maximumHeight() != height:
+                view.setFixedHeight(height)
 
     def _arrange_cards(self, wide: bool) -> None:
         if wide == self._wide:
@@ -815,7 +836,7 @@ class LogAnalysisPage(QWidget):
             self.guidance_list.addItem(f"[{label}] {strip_marker(item.content)}\n    출처: {item.case_label} · {item.source_name or '-'}")
         for item in guidance.check_methods:
             self.guidance_list.addItem(f"[원인 확인] {item.content}\n    출처: {item.case_label} · {item.source_name or '-'}")
-        fit_list_height(self.guidance_list)  # 절차가 목록 안에서 잘려 보이지 않게(화면 전체가 스크롤된다)
+        self._fit_guidance()  # 절차가 목록 안에서 잘리거나 빈 줄이 남지 않게(화면 전체가 스크롤된다)
         self.guidance_list.setVisible(self.guidance_list.count() > 0)  # 대응이 없으면 빈 상자를 숨긴다
         # ③ 상세 확인에도 같은 권장 대응(결과 맨 위, CR-01)
         self.guidance_detail.setTitle(GUIDANCE_TITLES[guidance.level])
@@ -824,9 +845,7 @@ class LogAnalysisPage(QWidget):
             self.guidance_detail_list.addItem(self.guidance_list.item(index).text())
         if not self.guidance_list.count():
             self.guidance_detail_list.addItem(guidance.message)
-        fit_list_height(self.guidance_detail_list, minimum=48)
-        self.guidance_detail_list.setMaximumHeight(self.guidance_detail_list.minimumHeight()
-                                                   + self.guidance_detail_list.fontMetrics().height())
+        self._fit_guidance()
         self.show_references(result)
         self.show_errors(result)
 
@@ -884,8 +903,9 @@ class LogAnalysisPage(QWidget):
             event_ids = [f.event_id for f in result.findings if f.event_id]
             with closing(self.context.database.connect()) as conn:
                 raw = {e.id: e.raw_text for e in EventRepository(conn).get_many(event_ids)}
-            self._errors[result.run_id] = presumed_errors(result.findings, result.keys, raw,
-                                                          references=reference_texts(result.references))
+            messages = presumed_errors(result.findings, result.keys, raw, references=reference_texts(result.references))
+            attach_context(self.context.database, messages)  # CR-13 SQ-01: 직전 단계·앞 3줄
+            self._errors[result.run_id] = messages
         return self._errors[result.run_id]
 
     def show_errors(self, result: AnalysisResult) -> None:

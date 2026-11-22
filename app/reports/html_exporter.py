@@ -54,6 +54,10 @@ def render_html(data: dict[str, Any]) -> str:
                 where = (f"{_e(names.get(m['file_id'], ''))} {_e(m['line'])}행" if m["line"] is not None else "—")
                 times = f" ×{_e(m['count'])}" if m.get("count") and m["count"] > 1 else ""
                 ref = f"<br>참고 자료: {_e(m['reference'])}" if m.get("reference") else ""
+                if m.get("stage"):
+                    ref += f"<br>직전 단계: {_e(m['stage_line'])}행 <code>{_e(m['stage'])}</code>"
+                if m.get("context"):
+                    ref += "<br>앞 줄: " + "<br>".join(f"<code>{_e(line)}</code>" for line in m["context"])
                 parts.append(f"<tr><td>{_e(m['group_title'])}</td><td>{where}{times}</td><td><code>{_e(m['text'])}</code></td>"
                              f"<td>{_e(m['reason'])} <span class='key'>{_e(m['key'] or '')}</span>{ref}</td></tr>")
             parts.append("</table>")

@@ -148,3 +148,14 @@ def test_import_options_are_folded(panel: LogImportPanel) -> None:  # CR-07 LI-1
     assert panel.session_combo.parent() is not None  # 지우지 않고 접어 두었다
     panel.options_section.toggle.click()
     assert not panel.options_section.content.isHidden()
+
+
+def test_folder_adds_all_log_files(qtbot, panel: LogImportPanel, tmp_path: Path) -> None:  # CR-13 LI-14
+    folder = tmp_path / "logs"
+    normal_log(folder / "a.log")
+    abnormal_log(folder / "sub" / "b.txt")
+    write(folder / "note.csv", ["no"])  # 로그 확장자가 아니면 넣지 않는다
+    assert [p.name for p in panel.expand_folders([folder])] == ["a.log", "b.txt"]
+    add_and_wait(qtbot, panel, [folder])
+    assert sorted(r.original_name for r in panel.records()) == ["a.log", "b.txt"]
+    assert not panel.folder_button.isHidden()

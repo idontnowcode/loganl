@@ -197,9 +197,26 @@ class LogEntryPage(QWidget):
         to_entries = QPushButton("다음: 구분·메모  ›")
         set_role(to_entries, variant="primary")
         to_entries.clicked.connect(lambda: self.steps.go(1))
+        # CR-13 LI-14: 넣는 로그의 구분을 미리 정해 두면 넣자마자 그 구분으로 표시된다(저장은 사용자가)
+        self.preset_none = QRadioButton("정하지 않음")
+        self.preset_normal = QRadioButton("모두 정상")
+        self.preset_abnormal = QRadioButton("모두 비정상")
+        self.preset_group = QButtonGroup(self)
+        for button in (self.preset_none, self.preset_normal, self.preset_abnormal):
+            self.preset_group.addButton(button)
+        self.preset_none.setChecked(True)
+        preset_row = QHBoxLayout()
+        preset_label = QLabel("넣는 로그 구분 미리 정하기")
+        set_role(preset_label, "cell-label")
+        preset_row.addWidget(preset_label)
+        for button in (self.preset_none, self.preset_normal, self.preset_abnormal):
+            preset_row.addWidget(button)
+        preset_row.addStretch(1)
+        self.import_panel.import_finished.connect(self._apply_preset)
         intake = QVBoxLayout()
         intake.setContentsMargins(0, 0, 4, 0)
         intake.addWidget(steps)
+        intake.addLayout(preset_row)
         intake.addWidget(self.import_panel, 1)
         intake.addLayout(nav_row(None, to_entries))
         step1 = QWidget()
@@ -501,6 +518,29 @@ class LogEntryPage(QWidget):
             self.questions_box.status.setText("저장된 로그를 목록에서 고르세요.")
             return
         self.queue_questions(saved)
+
+    def preset_label(self) -> str | None:
+        if self.preset_normal.isChecked():
+            return "NORMAL"
+        if self.preset_abnormal.isChecked():
+            return "ABNORMAL"
+        return None
+
+    def _apply_preset(self, result) -> None:
+        """방금 넣은 로그 중 아직 구분이 없는 것을 미리 정한 구분으로 표시한다(저장 전 '입력 중'). 저장된 구분은 바꾸지 않는다."""
+        label = self.preset_label()
+        if label is None:
+            return
+        marked = []
+        for log_file_id in result.log_file_ids:
+            entry = self.service.entry(log_file_id)
+            if entry.label is None and log_file_id not in self._drafts:
+                self._drafts[log_file_id] = Draft(label, entry.memo, entry.criteria)
+                marked.append(log_file_id)
+        if marked:
+            self.refresh_entries(select=marked)
+            self.message.setText(f"새로 넣은 로그 {len(marked)}개를 '{LABELS[label]}'(으)로 표시했습니다. "
+                                 "② 구분·메모에서 확인하고 저장하세요(단계를 넘기면 자동 저장).")
 
     # ── 다른 화면과 잇기 ──
     def receive(self, log_file_ids: list[int], label: str | None = None) -> None:

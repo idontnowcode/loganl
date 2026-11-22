@@ -62,7 +62,9 @@ class ErrorMessagesBox(QGroupBox):
             row.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             set_role(row, "message-row", GROUP_TONE.get(message.group, "neutral"))
             if message.line is not None:
-                row.setToolTip("두 번 누르면 원본 로그의 그 행으로 이동합니다.")
+                before = "\n".join(f"  {line}" for line in message.context)
+                row.setToolTip(("앞 줄(원문):\n" + before + "\n\n" if before else "")
+                               + "두 번 누르면 원본 로그의 그 행으로 이동합니다.")
                 row.setCursor(Qt.CursorShape.PointingHandCursor)
             row.double_clicked.connect(lambda i=index: self.jump(i))
             self.rows_layout.addWidget(row)

@@ -49,6 +49,9 @@ from app.storage.repositories import (
 logger = logging.getLogger("app.analysis")
 ProgressFn = Callable[[int, int, str], None]
 STEPS = 5
+SHORT_LOG_EVENTS = 20  # 이보다 이벤트가 적은 로그는 '비교 근거가 적음'을 메모에(DT-20)
+REFERENCE_EVENT_BUDGET = 200_000  # 정상 로그 대비 비교에 읽는 기준 이벤트 합계 상한(PF-01)
+REFERENCE_MIN_KEEP = 10  # 상한을 넘어도 기준은 이만큼은 쓴다('통째로 없음' 등 기준 10개 규칙)
 LOW_PRIORITY = 3
 
 
@@ -140,6 +143,10 @@ class DiagnosticEngine:
             any_abnormal = bool(CaseRepository(conn).approved(case_type="ABNORMAL"))
         records, events = current_parse(self.database, records, events)  # 예전 버전이 읽은 로그는 지금 파서로(DT-16)
         features = [extract(r, events[r.id]) for r in records]
+        short = [r.original_name for r, f in zip(records, features) if len(f.sequence) < SHORT_LOG_EVENTS]
+        if short:  # CR-13 DT-20
+            notes.append(f"로그가 짧아(이벤트 {SHORT_LOG_EVENTS}개 미만) 비교 근거가 적습니다: {', '.join(short)}. "
+                         "'찾은 이상 없음'이어도 정상이라는 뜻이 아닙니다.")
         merged_files: set[int] = set()
         for session_id in sorted({r.session_id for r in records}):  # 세션마다 따로 시간축(§4.1)
             group = [(r, events[r.id]) for r in records if r.session_id == session_id]
@@ -154,7 +161,9 @@ class DiagnosticEngine:
 
         report(1, STEPS, "비슷한 정상 로그 찾기 · 결정론 분석(명시적 오류·누락·순서·반복·지연)")
         # 비교 통계(CR-08)는 비슷한 정상 로그를 넓게(최대 20개) 쓰고, 화면·AI에는 위 5개만 보인다
-        normal_pool = find_similar(self.database, features, "NORMAL", request.mode_id, limit=REFERENCE_POOL)
+        normal_types_seen: set[str] = set()  # 저장된 정상 로그 전체의 이벤트 유형(DT-18)
+        normal_pool = find_similar(self.database, features, "NORMAL", request.mode_id, limit=REFERENCE_POOL,
+                                   seen_types=normal_types_seen)
         similar_normal = normal_pool[:5]
         reference: list = []
         if request.mode_id is None:
@@ -171,13 +180,14 @@ class DiagnosticEngine:
             normal_types = approved_normal_types(self.database, request.mode_id)
         findings = detect(features, patterns, normal_types)
         pool = comparison_pool(normal_pool) if request.mode_id is None else []
+        pool = self._within_budget(pool)  # 큰 로그(1~2만 줄)는 비교 기준을 이벤트 합계 안으로(PF-01)
         if pool:
             # CR-08 DT-01~14: 비슷한 정상 로그와 비교한 차이. 모두 '의심'이다. 기준이 많을수록 우연한 공통점(가끔 나오는
             # 이벤트·비슷한 반복 횟수)을 규칙으로 착각하지 않으므로 넓게(최대 20개) 쓴다. 점수가 0.4보다 조금 낮아도
             # 입력 로그의 이벤트 종류를 거의 다 담은 정상 로그는 기준이 된다(끊긴 로그·무언가 통째로 빠진 로그).
             reference_files = self._reference_files(pool)
             for f in features:
-                findings.extend(compare_with_normals(f, events[f.log_file_id], reference_files))
+                findings.extend(compare_with_normals(f, events[f.log_file_id], reference_files, normal_types_seen))
             if not reference:
                 notes.append(f"점수 0.4 이상인 정상 로그는 없지만, 이 로그의 이벤트 종류를 대부분 담은 정상 로그 {len(pool)}개와 "
                              "비교했습니다(일부가 빠진 로그일 수 있음).")
@@ -396,6 +406,19 @@ class DiagnosticEngine:
             for item in answer.unknowns:
                 add("AI_UNKNOWN", item, [])
                 claims.add(claim_text=item, claim_kind="UNKNOWN", source="AI", analysis_run_id=run_id)
+
+    def _within_budget(self, pool: list) -> list:
+        """비슷한 순서대로 기준을 담되 이벤트 합계가 REFERENCE_EVENT_BUDGET을 넘으면 멈춘다(최소 REFERENCE_MIN_KEEP개).
+        실제 장비 로그는 정상 1~2만 줄이라 기준 20개를 모두 읽으면 분석마다 30만 줄을 읽는다(2026-11-22 사용자 정보)."""
+        from app.learning.normal_learner import case_file_features
+
+        kept, total = [], 0
+        for similar in pool:
+            if len(kept) >= REFERENCE_MIN_KEEP and total >= REFERENCE_EVENT_BUDGET:
+                break
+            kept.append(similar)
+            total += sum(len(f.sequence) for f in case_file_features(self.database, similar.case.id))  # 기억해 둔 특징
+        return kept
 
     def _reference_files(self, reference) -> list[ReferenceFile]:
         out: list[ReferenceFile] = []
