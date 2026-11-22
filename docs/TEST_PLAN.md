@@ -445,3 +445,7 @@ Phase마다 아래에 결과를 덧붙인다.
 - ⑤ 폴더째 넣기·넣는 로그 구분 미리 정하기, ⑥ 권장 대응 목록 빈 줄·안내 띠 닫기·상태 표시줄 경로 가운데 줄임, ⑦ `packaging/make_update_zip.py`.
 - 시험: `unit/test_case_retriever_stage`(3), `unit/test_reference_checks`(+2), `unit/test_error_messages`(+1), `integration/test_short_log_note`(1), `integration/test_performance`(+1, LLA_PERF),
   `ui/test_log_import_panel`(+1), `ui/test_log_entry_page`(+1), `ui/test_main_window`(+1). 전체 **741 통과, 5 건너뜀**.
+
+### v0.6.0 릴리스 (2026-11-22)
+
+- CR-13 개선 묶음을 v0.6.0으로(스키마 7 그대로, 마이그레이션 없음). 갱신 zip(exe + `_internal`, 휴대용 AI 제외)을 `packaging/make_update_zip.py`로 만들어 올렸다. 빌드 전 테스트 741 통과, 5 건너뜀.
