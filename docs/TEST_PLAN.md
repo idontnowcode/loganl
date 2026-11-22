@@ -503,3 +503,8 @@ Phase마다 아래에 결과를 덧붙인다.
 - 리뷰 반영(CM-08~11)과 회귀: 4폴드 회귀 CT 100%·0%, 새형식·제품군 5개 100%·0%, 무작위 R5 240/240·오탐 1/240, 다중 챔버 92%·2% — 모두 그대로.
 - 시험: `unit/test_case_memory`(12), `unit/test_verdict`(3), `unit/test_parsers`(+1), `integration/test_analysis`(+1), `integration/test_diagnosis`(+2),
   `ui/test_log_analysis_page`(+2). 전체 **774 통과, 5 건너뜀**(빌드 때 다시 돎).
+
+### v0.7.0 릴리스 (2026-11-22)
+
+- CR-14 사례 기억·리뷰 반영(CM-08~11)·AI 설명 보조·파서 PA-12를 v0.7.0으로(스키마 7 그대로, 마이그레이션 없음). 갱신 zip(exe + `_internal`, 휴대용 AI 제외)을
+  `packaging/make_update_zip.py`로 만들어 풀고 `--check`(0.7.0·스키마 v7·gemma3:4b) 확인 뒤 올렸다. 빌드 전 테스트 774 통과, 5 건너뜀.
