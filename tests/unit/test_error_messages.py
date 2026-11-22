@@ -132,3 +132,35 @@ def test_stage_and_context_lines(tmp_path: Path) -> None:  # CR-13 SQ-01
         assert "직전 단계: 2행" in message_line(message)
     finally:
         ctx.close()
+
+
+def test_stage_prefers_same_component_when_lines_interleave(tmp_path: Path) -> None:  # 2026-11-22 SQ-03
+    """여러 구성요소가 동시에 도는 로그: 오류 바로 앞에 다른 구성요소의 시작 줄이 끼어도 오류 난 구성요소의 시작 줄을 고른다."""
+    from app.analysis.error_messages import ErrorMessage, attach_context
+    from app.bootstrap import initialize
+    from app.core.importer import LogImporter
+    from app.models.enums import OriginPurpose
+    from app.models.records import ImportRequest, SessionMode
+    from tests.logdata import iso_lines, write
+
+    lines = iso_lines([
+        ("INFO", "TEST-ARM", "TEST-MOVE-START src=TEST-PORT dst=TEST-CELL"),  # 2행: 오류 난 구성요소의 시작 줄
+        ("INFO", "TEST-CELL-B", "TEST-STEP-START step=TEST-PROC"),  # 3행: 다른 구성요소의 시작 줄(더 가까움)
+        ("INFO", "TEST-CELL-B", "TEST-TEL temp=25.1"),
+        ("ERROR", "TEST-ARM", "TEST-FAULT code=TEST-E710"),  # 5행
+        ("WARN", "TEST-NODE", "TEST-LINK-SLOW result=FAIL"),  # 6행: 이 구성요소는 시작 줄이 없음 → 가장 가까운 시작 줄
+    ])
+    ctx = initialize(tmp_path / "home", configure_logging=False)
+    try:
+        log_id = LogImporter(ctx.database, ctx.paths, ctx.settings.import_).import_logs(ImportRequest(
+            paths=[write(tmp_path / "mix.log", lines)], purpose=OriginPurpose.NORMAL_CASE,
+            session_mode=SessionMode.SEPARATE)).log_file_ids[0]
+        fault, slow = file_error_candidates(ctx.database, log_id)
+        assert fault.line == 5 and fault.stage_line == 2 and "TEST-MOVE-START" in fault.stage
+        assert slow.line == 6 and slow.stage_line == 3
+        message = ErrorMessage(group=ERROR, text="x", reason="y", log_file_id=log_id, line=5)
+        attach_context(ctx.database, [message])
+        assert message.stage_line == 2
+        assert len(message.context) == 3 and "TEST-TEL temp=25.1" in message.context[-1]  # 앞 3줄은 그대로 가까운 줄
+    finally:
+        ctx.close()

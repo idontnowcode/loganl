@@ -6,7 +6,7 @@ import re
 import sys
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Sequence
+from typing import Callable, Iterable, Sequence, TypeVar
 
 from app.models.records import EventRecord, LogFileRecord
 
@@ -64,8 +64,31 @@ def is_stage(text: str | None) -> bool:
     return bool(text and STAGE_WORDS.search(text))
 
 
+T = TypeVar("T")
+
+
+def pick_stage(nearest_first: Iterable[T], component: str | None,
+               component_of: Callable[[T], str | None], stage_of: Callable[[T], bool]) -> T | None:
+    """가까운 것부터 거슬러 올라가는 후보 중 직전 단계(SQ-03). 오류와 같은 구성요소의 시작 줄을 먼저 고르고,
+    그런 줄이 없으면 가장 가까운 시작 줄. 여러 구성요소가 동시에 도는 로그에서 다른 구성요소의 시작 줄이 사이에 끼어도
+    오류가 난 흐름의 단계를 고르려고."""
+    nearest = None
+    for item in nearest_first:
+        if not stage_of(item):
+            continue
+        if not component:
+            return item
+        if component_of(item) == component:
+            return item
+        if nearest is None:
+            nearest = item
+    return nearest
+
+
 def code_stages(features: FileFeatures) -> dict[str, str | None]:
-    """오류 코드마다 처음 나온 줄의 직전 단계(가장 가까운 앞쪽 시작 표시 이벤트 유형). 같은 코드라도 시퀀스 위치를 구분하려고."""
+    """오류 코드마다 처음 나온 줄의 직전 단계(가장 가까운 앞쪽 시작 표시 이벤트 유형). 같은 코드라도 시퀀스 위치를 구분하려고.
+    사례 비교에는 구성요소를 가리지 않는다. 같은 구성요소 우선(SQ-03, 화면 표시용)으로 바꿔 보니 가상 세트에서 '1등 사례가 같은 위치'가
+    CT 14/15 → 12/15, 다중 챔버 7/12 → 6/12로 나빠졌다(오류 난 부품 자신의 시작 줄은 여러 단계에서 비슷해 단계를 덜 가름)."""
     out: dict[str, str | None] = {}
     for event_type, event in features.first_event.items():
         if not event.error_code or event.error_code in out:

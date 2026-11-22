@@ -278,3 +278,116 @@ def test_component_missing_entirely() -> None:
     found = by_kind(check(lines, references(*TEN_REFS)))
     assert [f.detail["component"] for f in found["MISSING_EVENT/component_absent"]] == ["TEST-SUB"]
     assert "MISSING_EVENT/component_absent" not in by_kind(check(run_lines(4), references(*TEN_REFS)))
+
+
+# ── 2026-11-22 다중 챔버 가상 세트: 동시에 도는 처리 단위·다시 들르는 장소·단계마다 다른 설정값 ──
+def arm_lines(subs: int, retries: tuple[int, ...] = ()) -> list[tuple]:
+    """가상 이송: 기판마다 포트에서 집기 → 정렬대 놓기·집기(재시도 경고 가끔) → 처리대 놓기 → 처리대 집기 → 포트 놓기.
+    station=은 기판 번호가 아니라 여러 번 다시 들르는 장소다(포트는 집기가 먼저, 정렬대·처리대는 놓기가 먼저)."""
+    out = [("INFO", "TEST-SYS", "TEST-OPEN")]
+    for sub in range(subs):
+        out.append(("INFO", "TEST-ARM", "TEST-PICK station=TEST-PORT"))
+        out.append(("INFO", "TEST-ARM", "TEST-PLACE station=TEST-ALIGN"))
+        if sub in retries:
+            out.append(("WARN", "TEST-ARM", "TEST-GRIP-RETRY station=TEST-ALIGN"))
+        out += [("INFO", "TEST-ARM", "TEST-PICK station=TEST-ALIGN"), ("INFO", "TEST-ARM", "TEST-PLACE station=TEST-CELL"),
+                ("INFO", "TEST-ARM", "TEST-PICK station=TEST-CELL"), ("INFO", "TEST-ARM", "TEST-PLACE station=TEST-PORT")]
+    return out + [("INFO", "TEST-SYS", "TEST-CLOSE")]
+
+
+def test_occasional_retry_at_revisited_station_is_not_a_duplicate() -> None:  # DT-21
+    refs = references(arm_lines(4), arm_lines(5, retries=(2,)), arm_lines(6), arm_lines(7, retries=(5,)))
+    found = check(arm_lines(9, retries=(1, 6)), refs)  # 기판이 많으면 재시도도 두 번 나올 수 있다
+    assert [f for f in flow_findings(found) if f.detail["field"] == "station"] == []
+
+
+def cell_lines(jobs: int, cell_b: bool = True, notice: bool = True) -> list[tuple]:
+    out = [("INFO", "TEST-SCHED", "TEST-LOT-START")]
+    if not cell_b and notice:
+        out.append(("INFO", "TEST-SCHED", "TEST-CELL-OFF cell=TEST-B reason=TEST-MAINT"))
+    for job in range(jobs):
+        cell = "TEST-CELL-A" if job % 2 == 0 or not cell_b else "TEST-CELL-B"
+        out += [("INFO", cell, f"TEST-RUN job={job}"), ("INFO", cell, f"TEST-END job={job}")]
+    return out + [("INFO", "TEST-SCHED", "TEST-LOT-END")]
+
+
+def test_component_missing_without_the_line_that_always_came_with_it() -> None:  # DT-22
+    refs = references(*[cell_lines(6 + i % 3) for i in range(9)], *[cell_lines(6 + i, cell_b=False) for i in range(3)])
+    found = by_kind(check(cell_lines(8, cell_b=False, notice=False), refs))
+    unexplained = found["MISSING_EVENT/component_absent_unexplained"]
+    assert [f.detail["component"] for f in unexplained] == ["TEST-CELL-B"]
+    assert "TEST-CELL-OFF" in unexplained[0].summary and unexplained[0].detail["lacking_files"] == 3
+    assert "MISSING_EVENT/component_absent" not in found  # 정상에도 빠진 적이 있어 '늘 있던 구성요소'는 아님
+    assert "MISSING_EVENT/component_absent_unexplained" not in by_kind(check(cell_lines(8, cell_b=False), refs))  # 알림 있음
+
+
+def tel_lines(pattern: str, pause_at: int = -1, burst_gap_ms: int | None = None) -> list[tuple]:
+    """처리대 둘이 1초마다 번갈아 값을 남긴다(각자 2초 주기). pause_at부터 B가 쉬면 A 줄만 이어진다."""
+    out, values = [("INFO", "TEST-SYS", "TEST-OPEN")], [41.2, 43.7, 40.9, 42.4, 44.1, 41.8, 43.0, 40.3]
+    for i, cell in enumerate(pattern):
+        out.append((1000, "INFO", f"TEST-CELL-{cell}", f"TEST-TEL value={values[i % len(values)]}"))
+        if i == pause_at:
+            gap = burst_gap_ms if burst_gap_ms is not None else 2000
+            out += [(gap, "INFO", "TEST-CELL-A", f"TEST-TEL value={v}") for v in values[:7]]
+    return out + [(1000, "INFO", "TEST-SYS", "TEST-CLOSE")]
+
+
+def test_periodic_lines_at_usual_pace_are_not_a_burst() -> None:  # DT-23
+    refs = references(*[tel_lines("AB" * (10 + i)) for i in range(4)])
+    paced = check(tel_lines("AB" * 12, pause_at=8), refs)  # B가 쉬는 동안 A 값 줄이 평소 2초 간격대로 7번 더
+    assert [f for f in paced if f.finding_type == "REPETITION" and "run" in f.detail] == []
+    burst = check(tel_lines("AB" * 12, pause_at=8, burst_gap_ms=10), refs)  # 같은 줄이 10ms 간격으로 쏟아짐
+    assert [f.detail["run"] for f in burst if f.finding_type == "REPETITION" and "run" in f.detail] == [8]
+
+
+def recipe_lines(recipes: str, swap_job: int = -1) -> list[tuple]:
+    """작업마다 레시피(X·Y)에 따라 단계가 다르다. Y에만 있는 COOL은 늘 PROCESS 뒤."""
+    out = [("INFO", "TEST-SYS", "TEST-OPEN")]
+    for job, recipe in enumerate(recipes):
+        steps = ["PUMP", "PROCESS", "PURGE"] if recipe == "X" else ["PUMP", "HEAT", "PROCESS", "COOL"]
+        if job == swap_job:
+            i, j = steps.index("PROCESS"), steps.index("COOL")
+            steps[i], steps[j] = steps[j], steps[i]
+        out.append(("INFO", "TEST-CELL", f"TEST-RECIPE job={job} recipe=TEST-{recipe}"))
+        out += [("INFO", "TEST-CELL", f"TEST-STEP job={job} step={step}") for step in steps]
+        out.append(("INFO", "TEST-CELL", f"TEST-DONE job={job}"))
+    return out + [("INFO", "TEST-SYS", "TEST-CLOSE")]
+
+
+def test_step_order_swapped_inside_one_job() -> None:  # DT-24
+    refs = references(*[recipe_lines("XY" * (3 + i)) for i in range(4)])  # Y 작업 18개
+    assert flow_findings(check(recipe_lines("XYXYXY"), refs)) == []
+    found = by_kind(check(recipe_lines("XYXYXY", swap_job=3), refs))
+    swapped = found["ORDER_VIOLATION/flow"]
+    assert [(f.detail["field"], f.detail["values"]) for f in swapped] == [("job", ["3"])]
+    assert "step=COOL" in swapped[0].summary and "step=PROCESS" in swapped[0].summary
+
+
+ROOM = (24.1, 25.3, 26.8, 27.9, 25.0, 24.6, 26.2, 27.1)
+HOT = (348.2, 349.5, 350.9, 351.8, 350.1, 349.0, 351.2, 348.8)
+
+
+def temp_lines(hot: tuple[float, ...] = HOT, rounds: int = 4) -> list[tuple]:
+    """같은 값 줄에 상온 단계와 가열 단계 값이 섞인다(값 무리 둘)."""
+    out = [("INFO", "TEST-SYS", "TEST-OPEN")]
+    for r in range(rounds):
+        out += [("INFO", "TEST-CELL", f"TEST-TEL temp={v}") for v in ROOM]
+        out += [("INFO", "TEST-CELL", f"TEST-TEL temp={v}") for v in hot]
+    return out + [("INFO", "TEST-SYS", "TEST-CLOSE")]
+
+
+def test_value_drifting_between_groups_is_found() -> None:  # DT-25
+    refs = references(*[temp_lines() for _ in range(4)])
+    assert check(temp_lines(), refs) == []
+    found = by_kind(check(temp_lines(hot=HOT[:5] + (358.4, 366.0, 371.5)), refs))  # 가열 값이 서서히 오름(전체 범위 안)
+    grouped = found["VALUE_OUT_OF_RANGE/value_groups"]
+    assert len(grouped) == 1 and grouped[0].detail["value"] == 371.5 and grouped[0].detail["outside_count"] == 8
+    assert grouped[0].detail["groups"] == [[24.1, 27.9], [348.2, 351.8]]
+
+
+def test_mode_numbers_are_not_value_groups() -> None:  # DT-25 오탐 방지
+    def mode_lines(modes: tuple[int, ...]) -> list[tuple]:
+        return [("INFO", "TEST-SYS", "TEST-OPEN")] + [("INFO", "TEST-CELL", f"TEST-MODE mode={m}") for m in modes] + \
+            [("INFO", "TEST-SYS", "TEST-CLOSE")]
+    refs = references(*[mode_lines((1, 2) * 15) for _ in range(4)])  # 늘 1 아니면 2
+    assert [f for f in check(mode_lines((1, 2, 3, 3) * 5), refs) if f.detail.get("kind") == "value_groups"] == []

@@ -15,7 +15,8 @@ from contextlib import closing
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.core.feature_extractor import ERROR_LEVELS, STAGE_LOOKBACK, is_stage
+from app.core.feature_extractor import ERROR_LEVELS, STAGE_LOOKBACK, is_stage, pick_stage
+from app.models.records import EventRecord
 from app.storage.database import Database
 from app.storage.repositories import EventRepository
 
@@ -131,6 +132,14 @@ def presumed_errors(findings: Sequence[Any], keys: Mapping[int, str] | None = No
 CONTEXT_LINES = 3
 
 
+def _component(event: EventRecord) -> str | None:
+    return event.component
+
+
+def _event_is_stage(event: EventRecord) -> bool:
+    return is_stage(event.event_type) or is_stage(event.message)
+
+
 def attach_context(database: Database, messages: Sequence[ErrorMessage]) -> None:
     """원본 행이 있는 메시지마다 직전 단계(가장 가까운 앞쪽 시작 표시 줄)와 앞 3줄을 원문 그대로 붙인다(SQ-01)."""
     with closing(database.connect()) as conn:
@@ -138,9 +147,11 @@ def attach_context(database: Database, messages: Sequence[ErrorMessage]) -> None
         for message in messages:
             if message.log_file_id is None or message.line is None:
                 continue
-            before = repo.before(message.log_file_id, message.line, STAGE_LOOKBACK)
+            rows = repo.before(message.log_file_id, message.line + 1, STAGE_LOOKBACK + 1)  # 오류 줄 자신 + 앞 줄들
+            own = rows[0] if rows and rows[0].line_no == message.line else None
+            before = rows[1:] if own is not None else rows[:STAGE_LOOKBACK]
             message.context = [_first_line(e.raw_text) or _first_line(e.message) for e in before[:CONTEXT_LINES]][::-1]
-            stage = next((e for e in before if is_stage(e.event_type) or is_stage(e.message)), None)
+            stage = pick_stage(before, own.component if own else None, _component, _event_is_stage)
             if stage is not None:
                 message.stage = _first_line(stage.raw_text) or _first_line(stage.message)
                 message.stage_line = stage.line_no
@@ -167,11 +178,14 @@ def file_error_candidates(database: Database, log_file_id: int, limit: int = 15)
     with closing(database.connect()) as conn:
         events = EventRepository(conn).for_files([log_file_id]).get(log_file_id, [])
     picked: dict[str, ErrorMessage] = {}
-    stage = None  # 직전 단계 이벤트(SQ-01)
+    stage = None  # 가장 가까운 시작 줄(SQ-01)
+    stage_by_component: dict[str, EventRecord] = {}  # 구성요소마다 가장 가까운 시작 줄(SQ-03)
     for index, event in enumerate(events):
         previous = events[index - 1] if index else None
-        if previous is not None and (is_stage(previous.event_type) or is_stage(previous.message)):
+        if previous is not None and _event_is_stage(previous):
             stage = previous
+            if previous.component:
+                stage_by_component[previous.component] = previous
         level = (event.level or "").upper()
         raw = _first_line(event.raw_text) or _first_line(event.message)
         if level in ERROR_LEVELS or event.error_code:
@@ -186,12 +200,13 @@ def file_error_candidates(database: Database, log_file_id: int, limit: int = 15)
         if name in picked:
             picked[name].count = (picked[name].count or 1) + 1
             continue
+        chosen = (stage_by_component.get(event.component) if event.component else None) or stage
         picked[name] = ErrorMessage(
             group=group, text=raw, reason=reason, log_file_id=log_file_id, line=event.line_no, count=1,
             code=event.error_code, context=[_first_line(e.raw_text) or _first_line(e.message)
                                             for e in events[max(0, index - CONTEXT_LINES):index]],
-            stage=(_first_line(stage.raw_text) or _first_line(stage.message)) if stage else None,
-            stage_line=stage.line_no if stage else None)
+            stage=(_first_line(chosen.raw_text) or _first_line(chosen.message)) if chosen else None,
+            stage_line=chosen.line_no if chosen else None)
     ordered = sorted(picked.values(), key=lambda m: (GROUP_ORDER[m.group], m.line or 0))
     return ordered[:limit]
 

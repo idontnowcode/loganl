@@ -40,11 +40,16 @@ EQUAL_MIN_COUNT = 3  # 짝 횟수(DT-14)는 정상에서 3번 이상 나오던 �
 MAX_PER_KIND = 10
 BURST_MIN = 4  # 연달아 이만큼 이상
 BURST_FACTOR = 2  # 정상 로그 최대 연속의 이 배수를 넘으면
+BURST_PACE = 0.5  # 그래도 정상 로그의 보통 간격의 절반 이상으로 나왔으면 쏟아짐이 아님(DT-23)
 GAP_FACTOR = 5  # 정상 로그 최대 간격의 이 배수를 넘으면
 VALUE_MIN_OBSERVATIONS = 5
 VALUE_MIN_OBSERVATIONS_CONSTANT = 8  # 정상 로그에서 값이 늘 같았던 경우는 더 많이 봐야 쓴다
 VALUE_SPREAD_FACTOR = 3
 VALUE_RELATIVE_MARGIN = 0.5
+GROUP_GAP_SHARE = 0.15  # 정상 값 전체 폭의 15% 이상 빈 곳으로 나뉘면 값 무리(DT-25)
+GROUP_MIN_OBSERVATIONS = 20  # 무리마다 관찰 20번 이상
+GROUP_RELATIVE_MARGIN = 0.03  # 무리에서 값 크기의 3%(또는 무리 폭의 3배)를 넘게 떨어지면
+GROUP_MIN_OUTSIDE = 2  # 그런 값이 2개 이상일 때만
 COUNT_EXCESS = 2  # 늘 같은 횟수였던 이벤트가 이만큼 이상 많으면
 ORDER_MAX_TYPES = 60  # 순서를 비교할 이벤트 수(처음 나오는 순서로 앞에서부터)
 SHARE_MIN = 0.02  # 비율 비교는 정상 로그에서 전체의 2% 이상 나오던 이벤트만
@@ -54,6 +59,7 @@ SHARE_MIN_EXPECTED = 8  # 정상 비율대로라면 8번 이상 나왔어야 '�
 SHARE_CORE = 0.2  # 정상 로그에서 전체의 20% 이상인 핵심 이벤트는 짧은 로그에서도 '아예 없음'을 본다
 FLOW_MIN_IDS = 3  # 번호 칸으로 보려면 한 파일에 서로 다른 값이 3개 이상
 FLOW_MIN_EVENTS_PER_ID = 1.5  # 값 하나에 이벤트가 평균 1.5개 이상(번호마다 여러 단계가 이어짐)
+PAIR_MIN_SUPPORT = 10  # 흐름 안 '둘 다 나오면 늘 이 순서'(DT-24)는 정상 흐름 10개 이상에서 본 짝만
 STUCK_MIN_RUN = 5  # 같은 값이 이만큼 연속이면
 STUCK_MIN_DISTINCT = 10  # 정상 로그에서 값이 10가지 이상으로 늘 변하던 칸만(몇 가지 값만 쓰는 칸은 우연히 이어질 수 있음)
 BASIS = "REFERENCE_NORMAL"
@@ -82,10 +88,12 @@ def compare_with_normals(target: FileFeatures, events: Sequence[EventRecord],
     stats = [head_stats(r.features) for r in refs]
     tstats = head_stats(target)
     _NUMERIC_CACHE.clear()
+    _DETAIL_CACHE.clear()
     try:
         return _compare(target, events, refs, stats, tstats, detail, known_types)
     finally:
         _NUMERIC_CACHE.clear()  # 이벤트 목록을 붙잡아 두지 않는다
+        _DETAIL_CACHE.clear()
 
 
 def _compare(target: FileFeatures, events: Sequence[EventRecord], refs: Sequence[ReferenceFile], stats, tstats,
@@ -151,7 +159,40 @@ def _missing_components(target: FileFeatures, events: Sequence[EventRecord], ref
             detail={**detail, "kind": "component_absent", "component": component,
                     "reference_min_count": min(cnt[component] for cnt in counts)},
         ))
+    out += _unexplained_absence(target, refs, counts, present - required)
     return out[:MAX_PER_KIND]
+
+
+def _unexplained_absence(target: FileFeatures, refs: Sequence[ReferenceFile], counts: Sequence[Counter],
+                         ignore: set[str]) -> list[Finding]:
+    """정상 로그에서도 가끔 빠지는 구성요소가 이 로그에서 빠졌을 때, 정상에서 빠질 때마다 늘 함께 있던 줄이 이 로그에는 없음(DT-22).
+    예: 정상에서는 처리 단위가 빠질 때 늘 '꺼 둠' 알림 줄이 있었는데, 이 로그는 알림 없이 빠짐. 줄의 뜻은 해석하지 않고,
+    '빠진 정상 로그 모두에 있고, 그 구성요소가 있던 정상 로그에는 없던 이벤트'를 정상 로그 모양으로만 고른다."""
+    target_types = set(target.type_counts)
+    components = set().union(*counts) - ignore
+    out = []
+    for component in sorted(components):
+        if any(e.component == component for e in target.first_event.values()):
+            continue
+        having = [r for r, cnt in zip(refs, counts) if cnt.get(component, 0) >= 2]
+        lacking = [r for r, cnt in zip(refs, counts) if not cnt.get(component)]
+        if not lacking or len(having) * 2 < len(refs):
+            continue
+        companions = set.intersection(*(set(r.features.type_counts) for r in lacking))
+        companions -= set().union(*(set(r.features.type_counts) for r in having))
+        if not companions or companions & target_types:
+            continue  # 빠질 때 늘 있던 줄이 없거나, 이 로그에도 있음(설명되는 빠짐)
+        example = sorted(companions)[0]
+        line = _first_line(lacking[0].features.first_event[example].message)
+        out.append(Finding(
+            "DETERMINISTIC", "MISSING_EVENT",
+            f"구성요소 {component}의 로그가 한 줄도 없음. 비슷한 정상 로그에서 {component}가 빠진 {len(lacking)}개에는 "
+            f"늘 '{line}' 같은 줄이 함께 있었는데 이 로그에는 없음",
+            stance="SUPPORTS", severity="SUSPECT", log_file_id=target.log_file_id,
+            detail={"basis": BASIS, "reference_files": len(refs), "kind": "component_absent_unexplained",
+                    "component": component, "companions": sorted(companions)[:5], "lacking_files": len(lacking)},
+        ))
+    return out
 
 
 # ---------------------------------------------------------------- 이름 단위 통계
@@ -491,7 +532,47 @@ def _learn_flow(files: list[dict[str, list[tuple[str, EventRecord]]]]) -> dict |
     names = set().union(*sequences)
     most = {name: max(seq.count(name) for seq in sequences) for name in names}
     variable = {name for name in names if len({seq.count(name) for seq in sequences if name in seq}) >= 3}
-    return {"required": required, "most": most, "order": order, "start": start, "variable": variable}
+    # 시작 이벤트로 나뉘거나 필수 단계가 흐름마다 딱 한 번씩이면 '번호 하나 = 한 번의 흐름'. 아니면 여러 번 다시 들르는 칸
+    # (station=정렬기 등)이라 흐름 길이가 들른 횟수만큼 늘고, 가끔 나오는 이벤트(재시도 경고) 횟수도 따라 는다
+    # → 그런 이벤트의 겹침은 보지 않는다(DT-21).
+    single = start is not None or all(seq.count(name) == 1 for seq in sequences for name in required)
+    episodes = [episode for flows in files for items in flows.values() for episode in _episodes(items, start)]
+    pairs = _conditional_order(episodes) if single else set()
+    return {"required": required, "most": most, "order": order, "start": start, "variable": variable, "single": single,
+            "pairs": pairs}
+
+
+_DETAIL_CACHE: dict[int, tuple[EventRecord, str]] = {}  # 한 번 비교하는 동안만(같은 이벤트가 여러 번호 칸 흐름에 나옴)
+
+
+def _detailed(event: EventRecord) -> str:
+    """이벤트 이름 + 낱말 값 칸(step=COOL·state=OPEN 등, 숫자·번호는 뺌). 이름만으로는 같은 'STEP_START'인 단계를 가른다."""
+    cached = _DETAIL_CACHE.get(id(event))
+    if cached is not None and cached[0] is event:
+        return cached[1]
+    words = sorted(f"{k}={v}" for k, v in _WORD_FIELD.findall(_first_line(event.message)))
+    text = " ".join([_name(event.event_type or event.message), *words])
+    _DETAIL_CACHE[id(event)] = (event, text)
+    return text
+
+
+def _first_seen(episode: Sequence[tuple[str, EventRecord]]) -> list[str]:
+    first: dict[str, None] = {}
+    for _name_, event in episode:
+        first.setdefault(_detailed(event), None)
+    return list(first)
+
+
+def _conditional_order(episodes: Sequence[Sequence[tuple[str, EventRecord]]]) -> set[tuple[str, str]]:
+    """흐름 안에서 '둘 다 나올 때는 늘 a가 b보다 먼저'였던 짝(DT-24). 레시피마다 단계가 달라 모든 흐름에 있지는 않은 단계끼리도
+    순서를 본다. 정상 흐름 PAIR_MIN_SUPPORT개 이상에서 한 번도 어긋나지 않은 짝만."""
+    ahead: Counter = Counter()
+    for episode in episodes:
+        names = _first_seen(episode)
+        for i, a in enumerate(names):
+            for b in names[i + 1:]:
+                ahead[(a, b)] += 1
+    return {(a, b) for (a, b), n in ahead.items() if n >= PAIR_MIN_SUPPORT and not ahead.get((b, a))}
 
 
 def _id_flows(events: Sequence[EventRecord], refs: Sequence[ReferenceFile], detail: dict,
@@ -522,11 +603,15 @@ def _id_flows(events: Sequence[EventRecord], refs: Sequence[ReferenceFile], deta
                 if lacking:
                     problems["MISSING_EVENT"].append((value, first, f"{', '.join(lacking)} 없음"))
                 extra = sorted(n for n in set(names) if n in rule["most"] and n not in rule["variable"]
+                               and (rule["single"] or n in rule["required"])
                                and names.count(n) > max(rule["most"][n], 1))
                 if extra:
                     problems["REPETITION"].append((value, first, f"{', '.join(extra)} 겹침"))
                 swapped = [(a, b) for a, b in rule["order"] if a in names and b in names
                            and names.index(b) < names.index(a)]
+                if not swapped and rule["pairs"]:
+                    seen = {name: i for i, name in enumerate(_first_seen(items))}
+                    swapped = sorted((a, b) for a, b in rule["pairs"] if a in seen and b in seen and seen[b] < seen[a])
                 if swapped:
                     problems["ORDER_VIOLATION"].append((value, first, f"{swapped[0][1]}이(가) {swapped[0][0]}보다 먼저"))
         for kind, items in problems.items():
@@ -571,6 +656,8 @@ def _bursts(target: FileFeatures, events: Sequence[EventRecord], refs: Sequence[
         if key in seen or length < BURST_MIN or length <= BURST_FACTOR * max(ref_max.get(key, 0), 1):
             continue
         seen.add(key)
+        if _usual_pace(events[start:start + length], key, refs):
+            continue
         event = events[start] if start < len(events) else target.first_event[key]
         out.append(Finding(
             "DETERMINISTIC", "REPETITION",
@@ -583,6 +670,26 @@ def _bursts(target: FileFeatures, events: Sequence[EventRecord], refs: Sequence[
         if len(out) >= MAX_PER_KIND:
             break
     return out
+
+
+def _median_gap(stamps: Sequence[int]) -> float | None:
+    gaps = sorted(b - a for a, b in zip(stamps, stamps[1:]) if b >= a)
+    return gaps[len(gaps) // 2] if gaps else None
+
+
+def _usual_pace(run: Sequence[EventRecord], key: str, refs: Sequence[ReferenceFile]) -> bool:
+    """연달아 나온 줄들이 정상 로그에서 그 이벤트가 나오던 보통 간격대로 나왔으면 True(DT-23).
+    여러 처리 단위가 번갈아 줄을 남기는 로그에서 다른 단위가 잠시 쉬면, 주기 값 줄이 평소 속도로 나와도 '연달아'가 길어진다.
+    연달아 쏟아지는 반복은 평소보다 빠르다. 시각이 없으면 판단하지 않는다(False)."""
+    mine = _median_gap([e.ts_value_us for e in run if e.ts_value_us is not None])
+    if not mine:
+        return False
+    usual = [g for r in refs if (g := _median_gap([e.ts_value_us for e in r.events if e.ts_value_us is not None
+                                                     and (e.event_type or e.message) == key]))]
+    if not usual:
+        return False
+    usual.sort()
+    return mine >= BURST_PACE * usual[len(usual) // 2]
 
 
 # ---------------------------------------------------------------- 간격
@@ -693,6 +800,11 @@ def _values(target: FileFeatures, events: Sequence[EventRecord], refs: Sequence[
             margin = max(margin, 1.0)  # 늘 같던 값(예: 늘 0)은 1을 넘게 벗어날 때만 본다
         outside = [(v, e) for v, e in items if v < low - margin or v > high + margin]
         if not outside:
+            found = _outside_groups(field_key, items, values, target.log_file_id, detail)
+            if found is not None:
+                out.append(found)
+                if len(out) >= MAX_PER_KIND:
+                    break
             continue
         value, event = max(outside, key=lambda item: abs(item[0] - (low + high) / 2))
         name = field_key[1]
@@ -708,6 +820,56 @@ def _values(target: FileFeatures, events: Sequence[EventRecord], refs: Sequence[
         if len(out) >= MAX_PER_KIND:
             break
     return out
+
+
+def _value_groups(values: Sequence[float]) -> list[tuple[float, float]] | None:
+    """정상 값이 뚜렷이 떨어진 무리 여럿으로 나뉘면 무리마다 (최소, 최대). 아니면 None(DT-25).
+    같은 이벤트 모양에 단계마다 설정값이 다른 측정값이 섞인 경우(상온과 가열 단계 온도 등). 무리마다 관찰이 충분하고
+    무리 안에서도 값이 조금씩 변해야(측정값 모양) 쓴다. 늘 같은 값 몇 개로만 나오는 칸(모드 번호 등)은 쓰지 않는다."""
+    ordered = sorted(values)
+    spread = ordered[-1] - ordered[0]
+    if spread <= 0:
+        return None
+    groups: list[list[float]] = []
+    start = 0
+    for i in range(1, len(ordered)):
+        if ordered[i] - ordered[i - 1] >= GROUP_GAP_SHARE * spread:
+            groups.append(ordered[start:i])
+            start = i
+    groups.append(ordered[start:])
+    if len(groups) < 2 or any(len(g) < GROUP_MIN_OBSERVATIONS or len(set(g)) < 3 for g in groups):
+        return None
+    return [(g[0], g[-1]) for g in groups]
+
+
+def _near_group(value: float, groups: Sequence[tuple[float, float]]) -> bool:
+    for lo, hi in groups:
+        margin = max(VALUE_SPREAD_FACTOR * (hi - lo), GROUP_RELATIVE_MARGIN * max(abs(lo), abs(hi)))
+        if lo - margin <= value <= hi + margin:
+            return True
+    return False
+
+
+def _outside_groups(field_key: tuple[str, str], items: Sequence[tuple[float, EventRecord]], values: Sequence[float],
+                    log_file_id: int, detail: dict) -> Finding | None:
+    """전체 범위 안이지만 정상 값의 어느 무리에서도 멀리 떨어진 값(무리 사이 빈 곳·무리 바깥, DT-25). 2개 이상일 때만."""
+    groups = _value_groups(values)
+    if groups is None:
+        return None
+    far = [(v, e) for v, e in items if not _near_group(v, groups)]
+    if len(far) < GROUP_MIN_OUTSIDE:
+        return None
+    value, event = max(far, key=lambda item: min(min(abs(item[0] - lo), abs(item[0] - hi)) for lo, hi in groups))
+    ranges = ", ".join(f"{_number(lo)}~{_number(hi)}" for lo, hi in groups)
+    return Finding(
+        "DETERMINISTIC", "VALUE_OUT_OF_RANGE",
+        f"'{field_key[1]}' 값 {_number(value)}({event.line_no}행): {_first_line(event.message)}. "
+        f"비슷한 정상 로그에서 같은 이벤트의 값은 {ranges} 무리로만 나왔음({len(values)}번 관찰), "
+        f"이 로그에서 무리를 벗어난 값 {len(far)}개",
+        stance="SUPPORTS", severity="SUSPECT", log_file_id=log_file_id, event_id=event.id, line_start=event.line_no,
+        detail={**detail, "kind": "value_groups", "event_type": field_key[0], "field": field_key[1], "value": value,
+                "groups": [list(g) for g in groups], "observations": len(values), "outside_count": len(far)},
+    )
 
 
 # ---------------------------------------------------------------- 값 멈춤
