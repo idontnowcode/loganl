@@ -34,14 +34,15 @@ from PySide6.QtWidgets import (
 
 from app.bootstrap import AppContext
 from app.core.reference_reader import FORMATS, ReferenceReadError
-from app.core.reference_structurer import ROLE_LABELS, ROLES
+from app.core.reference_structurer import ROLE_LABELS, ROLES, judgment_side
 from app.learning.reference_library import STATUS_LABELS, ReferenceError, ReferenceLibrary
 from app.ui.natural_input import StatusLine
 from app.ui.theme import STATUS_TONE, comfortable_table, set_role
 
 DOC_COLUMNS = ("제목", "형식", "상태", "항목·문단")
-ENTRY_COLUMNS = ("포함", "코드", "명칭", "설명", "원인", "조치", "원문 위치")
-ENTRY_FIELDS = (None, "code", "title", "description", "cause", "action", "locator")
+ENTRY_COLUMNS = ("포함", "코드", "명칭", "설명", "원인", "조치", "판정", "원문 위치")
+ENTRY_FIELDS = (None, "code", "title", "description", "cause", "action", "judgment", "locator")
+JUDGMENT_USE = {"ABNORMAL": "판정에 씀: 이 항목이 로그에 나오면 비정상 의심", "NORMAL": "판정에 씀: 이 항목이 나온 줄은 문제없음"}
 SOURCE_LABELS = {"EXTRACTED": "문서에서", "USER": "직접 입력"}
 
 
@@ -118,7 +119,7 @@ class ReferenceManagerDialog(QDialog):
         for index, role in enumerate(ROLES):
             roles_grid.addWidget(QLabel(f"{ROLE_LABELS[role]} 열"), 1 + index // 3, (index % 3) * 2)
             roles_grid.addWidget(self.role_combos[role], 1 + index // 3, (index % 3) * 2 + 1)
-        roles_grid.addWidget(self.apply_roles_button, 2, 4, 1, 2)
+        roles_grid.addWidget(self.apply_roles_button, 2 + (len(ROLES) - 1) // 3, 4, 1, 2)  # 역할 칸 다음 줄 오른쪽
         self.roles_box = QGroupBox("표의 열 역할 (머리글로 추정 — 틀리면 고르고 '열 역할 적용')")
         self.roles_box.setLayout(roles_grid)
 
@@ -368,7 +369,7 @@ class ReferenceManagerDialog(QDialog):
             for column, name in enumerate(ENTRY_FIELDS):
                 if column == 0:
                     continue
-                value = row[name] or ""
+                value = (row[name] if name in row.keys() else None) or ""
                 item = QTableWidgetItem(value)
                 item.setData(Qt.ItemDataRole.UserRole, int(row["id"]))
                 editable = draft and name != "locator"
@@ -376,12 +377,15 @@ class ReferenceManagerDialog(QDialog):
                 item.setFlags(flags | Qt.ItemFlag.ItemIsEditable if editable else flags)
                 if name in ("description", "cause", "action", "title"):
                     item.setToolTip(value[:1000])
+                elif name == "judgment":  # CR-16 RJ-02: 이 낱말을 판정에 어떻게 쓰는지
+                    item.setToolTip(JUDGMENT_USE.get(judgment_side(value) or "", "판정에 안 씀(에러·정상처럼 적으면 판정에 씀)"
+                                                     if value else "비어 있음 — '에러'·'정상'처럼 적으면 판정에 씁니다"))
                 elif name == "code":  # 어디서 왔는지와 원문은 코드 칸 풍선 도움말로(열을 줄여 설명 칸을 넓게)
                     origin = SOURCE_LABELS.get(row["source_kind"], "")
                     source = (row["source_text"] or "")[:800]
                     item.setToolTip(f"{origin}\n원문: {source}".strip())
                 self.entry_table.setItem(r, column, item)
-        for column, width in ((0, 48), (1, 110), (2, 120), (4, 120), (5, 140), (6, 96)):
+        for column, width in ((0, 48), (1, 110), (2, 120), (4, 120), (5, 140), (6, 72), (7, 96)):
             self.entry_table.setColumnWidth(column, width)
         self._filling = False
 

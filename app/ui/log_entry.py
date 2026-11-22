@@ -542,18 +542,7 @@ class LogEntryPage(QWidget):
             self.message.setText(f"새로 넣은 로그 {len(marked)}개를 '{LABELS[label]}'(으)로 표시했습니다. "
                                  "② 구분·메모에서 확인하고 저장하세요(단계를 넘기면 자동 저장).")
 
-    # ── 다른 화면과 잇기 ──
-    def receive(self, log_file_ids: list[int], label: str | None = None) -> None:
-        """신규 분석의 '학습 사례로 등록': 로그를 목록에 올리고 구분을 미리 골라 둔다(저장은 사용자가)."""
-        self.import_panel.set_log_file_ids(self.import_panel.log_file_ids() + list(log_file_ids))
-        if label in LABELS:
-            for log_file_id in log_file_ids:
-                entry = self.service.entry(log_file_id)
-                self._drafts[log_file_id] = Draft(label, entry.memo, entry.criteria)
-        self.refresh_entries(select=list(log_file_ids))
-        self.steps.go(1)
-        self.message.setText("분석한 로그를 올렸습니다. 필요하면 메모를 적고 저장하세요.")
-
+    # ── 다른 화면과 잇기 ── (신규 분석에서 사례 저장은 그 자리에서 한다, CR-16 UX-03)
     def bring_saved(self, row: int) -> None:
         item = self.saved_table.item(row, 0)
         if item is None:

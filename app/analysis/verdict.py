@@ -1,7 +1,7 @@
 """최종 판정 하나: 정상 / 비정상 / 판단 보류 (CR-14 리뷰 2026-11-22).
 
 규칙 판정과 사례 기억 보정이 낸 이상 수준(anomaly_level)을 바탕으로, 근거가 부족하거나 판단이 엇갈리면 '판단 보류'로 둔다.
-- 비정상: 규칙·사례 기억이 이상 근거를 찾음(의심·승인된 규칙 위반).
+- 비정상: 규칙·사례 기억·참고 자료 판정(CR-16)·엔지니어 기준(CR-15)이 이상 근거를 찾음(의심·승인된 규칙 위반).
 - 판단 보류: 비교할 정상 로그가 없음 / 비슷한 정상 로그가 없어 제대로 비교 못 함 / 로그가 짧음 /
   근거 지문이 비슷한 확인 로그의 판정이 엇갈림.
 - 정상: 이상을 못 찾았고 위 보류 사유가 없음.
@@ -41,9 +41,10 @@ def memory_split(memory: Any) -> bool:
 
 
 def final_verdict(axes: dict[str, str], memory: Any = None, ai_judgment: Any = None, short_log: bool = False,
-                  criteria: Any = None) -> Verdict:
+                  criteria: Any = None, reference: Any = None) -> Verdict:
     """ai_judgment는 받기만 하고 판정에는 쓰지 않는다(설명 보조). criteria: 엔지니어가 답한 판단 기준(CR-15) —
-    이상 수준(axes)에 이미 반영돼 있고, 여기서는 이유와 '사람 확인 필요' 보류만 더한다."""
+    이상 수준(axes)에 이미 반영돼 있고, 여기서는 이유와 '사람 확인 필요' 보류만 더한다. reference: 참고 자료의 판정 설명(CR-16)
+    — 역시 이상 수준에 반영돼 있고 이유만 더한다."""
     level = axes.get("anomaly_level")
     if criteria is not None and criteria.hold_decisive and level != "RULE_VIOLATION":
         return Verdict(UNDECIDED, "판단 보류", "info", list(criteria.hold), "판단 보류")
@@ -54,6 +55,8 @@ def final_verdict(axes: dict[str, str], memory: Any = None, ai_judgment: Any = N
         reasons = ["정상 로그·규칙과 다른 근거가 있음"]
         if memory is not None and memory.changed:
             reasons = ["근거 지문이 비슷한 확인된 비정상 로그가 있음(사례 판단)"]
+        if reference is not None and reference.signed:
+            reasons = list(reference.reasons)
         if by_criteria:
             reasons = [f"엔지니어 기준: {r}" for r in by_criteria]
         return Verdict(ABNORMAL, "비정상 의심", "warn", reasons, "비정상 의심")
@@ -71,6 +74,8 @@ def final_verdict(axes: dict[str, str], memory: Any = None, ai_judgment: Any = N
     normal_reasons = ["정상 로그와 비교해 이상 근거를 찾지 못함"]
     if memory is not None and memory.changed:
         normal_reasons = ["규칙이 본 차이가 모두 확인된 정상 로그에도 있었음(사례 판단)"]
+    if reference is not None and reference.changed:
+        normal_reasons = list(reference.reasons)
     if by_criteria:
         normal_reasons = [f"엔지니어 기준: {r}" for r in by_criteria]
     return Verdict(NORMAL, "정상 — 찾은 이상 없음", "ok", normal_reasons, "정상")
@@ -78,4 +83,5 @@ def final_verdict(axes: dict[str, str], memory: Any = None, ai_judgment: Any = N
 
 def verdict_of(result: Any) -> Verdict:
     return final_verdict(result.axes, getattr(result, "memory", None), getattr(result, "ai_judgment", None),
-                         getattr(result, "short_log", False), getattr(result, "criteria", None))
+                         getattr(result, "short_log", False), getattr(result, "criteria", None),
+                         getattr(result, "reference_judgment", None))

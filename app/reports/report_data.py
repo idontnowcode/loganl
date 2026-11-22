@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from app import APP_NAME, __version__
+from app.core.reference_structurer import judgment_side
 from app.models import utc_now_iso
 from app.storage.database import Database
 from app.analysis.error_messages import attach_context, presumed_errors, reference_texts, should_show
@@ -169,6 +170,10 @@ def reference_lines(ref: dict[str, Any]) -> list[str]:
     lines = [f"{ref['code']} ×{ref['count']} (처음 {ref['file']} {ref['line']}행)"]
     for entry in ref["entries"]:
         values = " / ".join(f"{label}: {entry[name]}" for name, label in REFERENCE_FIELDS if entry.get(name))
+        if entry.get("judgment"):  # CR-16 RJ-01·02: 문서의 판정 낱말과, 판정에 어떻게 쓰는지
+            side = judgment_side(entry["judgment"])
+            use = {"ABNORMAL": "비정상으로 씀", "NORMAL": "정상으로 씀"}.get(side or "", "판정에 안 씀")
+            values = f"판정: {entry['judgment']}({use})" + (f" / {values}" if values else "")
         source = entry["document_title"] + (f" · {entry['locator']}" if entry.get("locator") else "")
         lines.append(f"  {values or '(설명 없음)'}  [출처 {source}]")
     return lines
@@ -187,7 +192,7 @@ def report_text(data: dict[str, Any]) -> str:
     verdict = data.get("verdict") or {}
     lines.append(f"[최종 판정 — {verdict.get('title', '-')}]")
     lines += [f"  · {reason}" for reason in verdict.get("reasons", [])]
-    lines += [f"  · {verdict[k]}" for k in ("memory", "ai") if verdict.get(k)]
+    lines += [f"  · {verdict[k]}" for k in ("memory", "reference", "ai") if verdict.get(k)]
     lines.append("")
     lines.append(f"[권장 대응 — {data['axes']['response_guidance']['text']}]")
     lines += [f"  [{i['label']}] {i['text']}  (출처 {i['case']} · {i['source'] or '-'})" for i in data["guidance"]["items"]]

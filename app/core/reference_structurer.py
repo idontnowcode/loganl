@@ -1,6 +1,6 @@
 """참고 자료에서 코드 항목 뽑기 (변경 요청 CR-04 REF-02). 결정론.
 
-- 표: 머리글로 열 역할(코드·명칭·설명·원인·조치)을 추정한다. 사용자가 화면에서 바꿀 수 있다(column_map).
+- 표: 머리글로 열 역할(코드·명칭·설명·원인·조치·판정)을 추정한다. 사용자가 화면에서 바꿀 수 있다(column_map).
 - 글: `코드: 설명`, `코드 - 설명`, `코드<탭>설명` 줄과 `## 코드 제목` 머리글 블록(아래 줄은 설명, '원인:'·'조치:' 줄은 따로).
 항목마다 원문 위치와 원문을 남긴다. **뜻을 만들지 않는다**: 값은 언제나 문서의 글자 그대로다.
 """
@@ -12,9 +12,12 @@ from dataclasses import dataclass
 
 from app.core.reference_reader import ReadResult, Table, TextLine
 
-ROLES = ("code", "title", "description", "cause", "action")
-ROLE_LABELS = {"code": "코드", "title": "명칭", "description": "설명", "cause": "원인", "action": "조치"}
+ROLES = ("code", "title", "description", "cause", "action", "judgment")
+ROLE_LABELS = {"code": "코드", "title": "명칭", "description": "설명", "cause": "원인", "action": "조치", "judgment": "판정"}
 HEADER_WORDS = {  # 정규화(소문자·공백 제거)한 머리글에 들어 있으면 그 역할. 위에서부터 먼저 맞는 것.
+    # CR-16 RJ-01: 문서가 '이 로그는 에러/정상'이라고 적은 열. 값은 글자 그대로 저장하고 judgment_side로만 읽는다.
+    "judgment": ("판정", "판단", "구분", "분류", "정상여부", "이상여부", "에러여부", "오류여부", "심각도", "등급", "severity",
+                 "verdict", "judg", "classif"),
     "cause": ("원인", "cause", "reason"),
     "action": ("조치", "대처", "대응", "해결", "처리방법", "action", "solution", "remedy", "countermeasure"),
     "title": ("명칭", "이름", "제목", "에러명", "오류명", "알람명", "name", "title"),
@@ -25,12 +28,13 @@ HEADER_WORDS = {  # 정규화(소문자·공백 제거)한 머리글에 들어 �
 CODE_TOKEN = r"[A-Za-z0-9][A-Za-z0-9_\-]{0,31}"
 _LINE = re.compile(rf"^\s*(?:[-*•·]\s*)?(?P<code>{CODE_TOKEN})\s*(?:[:：|]|\s[-–—]\s|\t|\s{{2,}})\s*(?P<rest>\S.*)$")
 _HEADING = re.compile(rf"^\s*#{{1,6}}\s+(?P<code>{CODE_TOKEN})(?:\s*[:：\-–—]\s*|\s+|$)(?P<title>.*)$")
-_LABELED = re.compile(r"^\s*(?:[-*•·]\s*)?(?P<label>원인|조치|대처|해결|설명|명칭|cause|action|solution|description)\s*[:：]\s*(?P<rest>.*)$",
+_LABELED = re.compile(r"^\s*(?:[-*•·]\s*)?(?P<label>원인|조치|대처|해결|설명|명칭|판정|구분|cause|action|solution|description)"
+                      r"\s*[:：]\s*(?P<rest>.*)$",
                       re.IGNORECASE)
 _DATE = re.compile(r"^\d{4}[-_]\d{1,2}[-_]\d{1,2}$")
 LABEL_ROLES = {"원인": "cause", "cause": "cause", "조치": "action", "대처": "action", "해결": "action",
                "action": "action", "solution": "action", "설명": "description", "description": "description",
-               "명칭": "title"}
+               "명칭": "title", "판정": "judgment", "구분": "judgment"}
 
 
 @dataclass
@@ -42,10 +46,45 @@ class EntryDraft:
     action: str | None = None
     locator: str | None = None
     source_text: str | None = None
+    judgment: str | None = None  # 문서의 판정 낱말 그대로(CR-16 RJ-01)
 
 
 def normalize_code(code: str) -> str:
     return "".join(code.split()).upper()
+
+
+# CR-16 RJ-02: 판정 칸의 낱말 → 판정 쪽. 문서의 분류 낱말을 읽기만 한다(뜻을 만들지 않음). 목록에 없는 낱말(경고·주의 등),
+# 두 쪽이 섞임, 부정은 판정에 쓰지 않는다.
+JUDGMENT_ABNORMAL = ("비정상", "에러", "오류", "이상", "고장", "불량", "알람", "점검필요", "조치필요", "error", "fault", "fail",
+                     "abnormal", "alarm", "critical", "fatal", "ng")
+JUDGMENT_NORMAL = ("정상", "문제없음", "무시", "무해", "정보", "normal", "ok", "ignore", "benign", "info")
+_NEGATION = ("아님", "아니", "not", "non")
+_ASCII_WORD = re.compile(r"[a-z]+")
+
+
+def judgment_side(text: str | None) -> str | None:
+    """'ABNORMAL'·'NORMAL'·None. 영어 낱말은 낱말 단위로(예: 'ok'가 'token' 안에서 맞지 않게), 한국어는 글자 그대로 찾는다."""
+    if not text:
+        return None
+    flat = re.sub(r"\s+", "", text.casefold())
+    words = set(_ASCII_WORD.findall(text.casefold()))
+
+    def has(word: str, body: str) -> bool:
+        return word in words if word.isascii() else word in body
+
+    if any(has(n, flat) for n in _NEGATION):
+        return None
+    abnormal = any(has(w, flat) for w in JUDGMENT_ABNORMAL)
+    rest = flat
+    for w in JUDGMENT_ABNORMAL:  # '비정상' 안의 '정상'을 정상으로 세지 않게 비정상 낱말을 지우고 본다
+        if not w.isascii():
+            rest = rest.replace(w, " ")
+    normal = any(has(w, rest) for w in JUDGMENT_NORMAL)
+    if "문제없음" in flat or "이상없음" in flat:  # '문제 없음'·'이상 없음'은 정상('이상'이 들어 있어도)
+        return "NORMAL" if not any(w in flat for w in ("에러", "오류", "고장", "불량")) else None
+    if abnormal == normal:
+        return None
+    return "ABNORMAL" if abnormal else "NORMAL"
 
 
 def looks_like_code(token: str) -> bool:

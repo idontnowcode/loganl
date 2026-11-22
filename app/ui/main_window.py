@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtCore import QThreadPool, Qt, QUrl
-from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QPainter
+from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QKeySequence, QPainter, QShortcut
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -190,13 +190,13 @@ class MainWindow(QMainWindow):
         self.import_panels.append(self.entry_page.import_panel)
         self.tabs.addTab(self.entry_page, PLANNED_SCREENS[0].title)
         self.analysis_page = LogAnalysisPage(context, client_factory)
-        self.analysis_page.register_requested.connect(self.register_case_from_analysis)
         self.import_panels.append(self.analysis_page.import_panel)
         self.tabs.addTab(self.analysis_page, PLANNED_SCREENS[1].title)
         self.tabs.currentChanged.connect(lambda _i: self.flush_autosave())
         # CR-12 ST-01: 위 탭 줄 대신 왼쪽 메뉴. 탭 위젯은 화면 묶음으로만 쓴다(자동 저장·시험 연결 그대로).
         self.tabs.tabBar().hide()
         self.nav = SideNav()
+        self.nav.add_back(self.go_back)  # CR-16 UX-04
         self.nav.add_group("작업")
         self.nav.add_page("학습 (로그 입력)")
         self.nav.add_page("신규 분석")
@@ -212,6 +212,14 @@ class MainWindow(QMainWindow):
         self.tabs.currentChanged.connect(self.nav.set_current)
         self.nav.set_current(self.tabs.currentIndex())
         self.entry_page.analysis_requested.connect(lambda: self.tabs.setCurrentWidget(self.analysis_page))
+        # CR-16 UX-04: 화면 이동 이력(작업 화면 + ①②③ 단계). 대화 상자는 닫으면 돌아오므로 넣지 않는다
+        self._history: list[tuple[int, int]] = []
+        self._going_back = False
+        self._location = self._here()
+        self.tabs.currentChanged.connect(lambda _i: self._moved())
+        for page in (self.entry_page, self.analysis_page):
+            page.steps.step_changed.connect(lambda _i: self._moved())
+        QShortcut(QKeySequence("Alt+Left"), self, activated=self.go_back)
 
         central = QWidget()
         central_layout = QVBoxLayout(central)
@@ -367,12 +375,49 @@ class MainWindow(QMainWindow):
         self.entry_page.refresh_saved()
         self.refresh_hint()
 
-    def register_case_from_analysis(self, case_type: str, log_file_ids: list, title: str) -> None:
-        """분석한 로그를 로그 입력 탭에 올리고 구분을 미리 골라 둔다(저장은 사용자가, CR-06 LI-08)."""
-        self.entry_page.receive(list(log_file_ids), case_type)
-        self.tabs.setCurrentWidget(self.entry_page)
-        kind = "정상" if case_type == "NORMAL" else "비정상"
-        self.statusBar().showMessage(f"분석한 로그를 로그 입력 탭에 '{kind}'으로 올렸습니다. 메모를 적고 저장하세요.", 10_000)
+    # ── 뒤로 가기 (CR-16 UX-04) ──
+    HISTORY_MAX = 50
+
+    def _here(self) -> tuple[int, int]:
+        index = self.tabs.currentIndex()
+        steps = getattr(self.tabs.widget(index), "steps", None)
+        return index, steps.current() if steps is not None else 0
+
+    def _moved(self) -> None:
+        here = self._here()
+        if here == self._location:
+            return
+        if not self._going_back:
+            self._history.append(self._location)
+            del self._history[:-self.HISTORY_MAX]
+        self._location = here
+        self.nav.set_back_enabled(bool(self._history))
+
+    def go_back(self) -> bool:
+        """앞에 보던 화면으로. 그 단계가 지금 잠겨 있으면(예: 목록을 비움) 그 작업 화면의 지금 단계에 머문다."""
+        while self._history:
+            tab, step = self._history.pop()
+            if (tab, step) == self._here():
+                continue
+            self._going_back = True
+            try:
+                self.tabs.setCurrentIndex(tab)
+                steps = getattr(self.tabs.widget(tab), "steps", None)
+                if steps is not None:
+                    steps.go(step)
+            finally:
+                self._going_back = False
+            self._location = self._here()
+            self.nav.set_back_enabled(bool(self._history))
+            return True
+        self.nav.set_back_enabled(False)
+        return False
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802 (Qt 이름 그대로) — 마우스 '뒤로' 단추
+        if event.button() == Qt.MouseButton.BackButton and self.go_back():
+            event.accept()
+            return
+        super().mousePressEvent(event)
 
     def open_case_review(self) -> None:
         CaseReviewDialog(self.context, self.open_case, self).exec()

@@ -8,7 +8,7 @@ analysis_evidence에 근거 키(EV-0001…)와 함께 저장한다. AI가 없거
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextlib import closing
 from dataclasses import dataclass, field
 from typing import Any
@@ -26,6 +26,7 @@ from app.analysis.case_retriever import (
     reference_normals,
 )
 from app.analysis.reference_checks import ReferenceFile, compare_with_normals
+from app.analysis.reference_judgment import JudgedMatch, apply_reference
 from app.analysis.reference_matcher import PassageHit, ReferenceMatch, match_passages, match_references
 from app.analysis.result_builder import Applicable, ResponseGuidance, build_response_guidance
 from app.config import AppSettings
@@ -34,7 +35,7 @@ from app.core.feature_extractor import FileFeatures, extract
 from app.core.reparse import current_parse
 from app.core.sequence_analyzer import build_timeline
 from app.learning.case_memory import fingerprint_of
-from app.learning.criteria import CriteriaService, Criterion, apply_criteria
+from app.learning.criteria import ABNORMAL_SIGN, BENIGN, CriteriaService, Criterion, apply_criteria
 from app.learning.normal_learner import default_client_factory
 from app.models import utc_now_iso
 from app.storage.database import Database, transaction
@@ -134,6 +135,7 @@ class AnalysisResult:
     short_log: bool = False  # 이벤트가 적어 비교 근거가 적음(DT-20) — 최종 판정 '판단 보류' 사유
     criteria: Any = None  # app.learning.criteria.CriteriaDecision (CR-15, 엔지니어가 답한 판단 기준)
     questions: list = field(default_factory=list)  # app.learning.criteria.Question — 판단을 돕는 질문(CR-15 JQ-01·02)
+    reference_judgment: Any = None  # app.analysis.reference_judgment.ReferenceDecision (CR-16, 참고 자료의 판정 설명)
 
     @property
     def verdict(self):
@@ -273,11 +275,25 @@ class DiagnosticEngine:
         if memory is not None and memory.total:
             findings.extend(memory_findings(memory))
             notes.append(memory.note())
-        # CR-15 JQ-04: 엔지니어가 판단 질문에 답해 만든 기준을 덮어 적용(가장 강함). 해로운 기준은 확인 로그로 점검해 끈다
         fp = memory.fp if memory is not None and memory.fp is not None else fingerprint_of(findings, rule_level, normals_count)
         unit_events = [e for f in features for e in events[f.log_file_id]]
+        # CR-16 RJ-04: 승인된 참고 자료에 판정(에러·정상 등)이 적힌 항목이 로그에 나오면 판정에 쓴다. 확인 로그와 자주 어긋나면 건너뜀
+        references = match_references(self.database, request.log_file_ids)
+        judged = apply_reference(references, findings, fp.strong, level, self._reference_counts(request.log_file_ids))
+        if judged.used or judged.skipped:
+            notes.append(judged.note())
+        if judged.used:
+            level = judged.level
+            first = judged.used[0].match
+            findings.append(Finding("RETRIEVAL", "TEXT_MATCH", judged.note()[:400],
+                                    stance="SUPPORTS" if level in DETECTED_LEVELS else "CONTRADICTS",
+                                    log_file_id=first.first_log_file_id, event_id=first.first_event_id,
+                                    line_start=first.first_line,
+                                    detail={"role": "REFERENCE_JUDGMENT", "entries": [i.hit.entry_id for i in judged.used],
+                                            "reasons": judged.reasons}))
+        # CR-15 JQ-04: 엔지니어가 판단 질문에 답해 만든 기준을 덮어 적용(가장 강함). 해로운 기준은 확인 로그로 점검해 끈다
         active = CriteriaService(self.database).checked(memory.cases if memory is not None else [])
-        criteria = apply_criteria(fp.strong, fp.features, active, unit_events, level)
+        criteria = apply_criteria(frozenset(fp.strong | judged.sign_features), fp.features, active, unit_events, level)
         if criteria.fired:
             level = criteria.level
             notes.append(criteria.note())
@@ -298,7 +314,6 @@ class DiagnosticEngine:
         applicable_ids = {c.case.id for c in candidates}
         findings.extend(self._knowledge_refs([s for s in similar_abnormal if s.case.id in applicable_ids]))
         # CR-04 REF-04: 승인된 참고 자료에 있는 코드가 로그에 나오면 따로 보여 준다(권장 대응과 섞지 않음).
-        references = match_references(self.database, request.log_file_ids)
         for match in references:
             findings.append(Finding(
                 "RETRIEVAL", "TEXT_MATCH", match.summary(), log_file_id=match.first_log_file_id,
@@ -317,7 +332,7 @@ class DiagnosticEngine:
         self._finish(run_id, status="COMPLETED", **axes)
         result = AnalysisResult(run_id, axes, findings, similar_normal, similar_abnormal, guidance, keys, notes,
                                 merged_files, references=references, passages=passages, memory=memory,
-                                short_log=bool(short), criteria=criteria)
+                                short_log=bool(short), criteria=criteria, reference_judgment=judged)
         result.questions = self._questions(result, fp, active)
         report(4, STEPS, "결정론·검색 단계 완료")
         if request.use_ai:
@@ -532,7 +547,41 @@ class DiagnosticEngine:
         raw = {e.id: e.raw_text for e in rows}
         messages = {e.id: e.message for e in rows}
         cases = result.memory.cases if result.memory is not None else []
+        reference = result.reference_judgment  # CR-16 RJ-06: 참고 자료가 판정을 준 근거는 묻지 않는다
+        if reference is not None:
+            known += [Criterion(0, f, ABNORMAL_SIGN, "참고 자료") for f in reference.sign_features]
+            known += [Criterion(0, f, BENIGN, "참고 자료") for f in reference.benign_features]
         return make_questions(result.findings, fp.strong, fp.weak, result.verdict.state, cases, known, raw, messages)
+
+    _REFERENCE_COUNTS: dict[tuple, tuple[int, int]] = {}  # (DB, 사례 상태, 항목) → 개수. 앱이 켜져 있는 동안만
+
+    def _reference_counts(self, mine: Sequence[int]):
+        """참고 자료 판정의 스스로 점검(CR-16 RJ-05): 그 항목이 나온 확인된 정상·비정상 사례 수. 이 분석 단위의 로그가 걸린
+        사례는 뺀다. 사례가 바뀌지 않았으면 앞에서 센 값을 쓴다."""
+        with closing(self.database.connect()) as conn:
+            repo = CaseRepository(conn)
+            approved = repo.approved()
+            links = {case.id: repo.log_file_ids(case.id) for case in approved}
+        cases = [c for c in approved if not set(links[c.id]) & set(mine)]
+        if not cases:
+            return None
+        state = (str(self.database.db_file), len(cases), max(c.id for c in cases), sum(c.id for c in cases))
+        logs = [i for c in cases for i in links[c.id]]
+        case_of = {i: c for c in cases for i in links[c.id]}
+
+        def counts(item: JudgedMatch) -> tuple[int, int]:
+            key = (*state, item.hit.entry_id)
+            if key not in self._REFERENCE_COUNTS:
+                text = " ".join(item.hit.code.split()) if item.match.via == "TEXT" else None
+                code = None if text else item.match.code_norm
+                with closing(self.database.connect()) as conn:
+                    files = EventRepository(conn).files_with(logs, code_norm=code, text=text)
+                hit_cases = {case_of[i].id: case_of[i].case_type for i in files}
+                self._REFERENCE_COUNTS[key] = (sum(t == "NORMAL" for t in hit_cases.values()),
+                                               sum(t == "ABNORMAL" for t in hit_cases.values()))
+            return self._REFERENCE_COUNTS[key]
+
+        return counts
 
     def _save_verdict(self, result: AnalysisResult) -> None:
         """최종 판정(정상·비정상·판단 보류)·이유·사례 판단·AI 판정을 분석 폴더에 남긴다. 보고서가 화면과 같은 판정을 보이게
@@ -542,6 +591,7 @@ class DiagnosticEngine:
         verdict = result.verdict
         data = {"state": verdict.state, "title": verdict.title, "reasons": verdict.reasons,
                 "memory": result.memory.note() if result.memory is not None and result.memory.total else None,
+                "reference": result.reference_judgment.note() if result.reference_judgment is not None else None,
                 "ai": result.ai_judgment.note() if result.ai_judgment is not None else None}
         try:
             folder = self.paths.analysis / f"R-{result.run_id:04d}"

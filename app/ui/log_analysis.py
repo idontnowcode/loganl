@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
@@ -39,10 +40,11 @@ from app.analysis.error_messages import ErrorMessage, attach_context, presumed_e
 from app.bootstrap import AppContext
 from app.core.cancel import CancelToken
 from app.learning.intake import IntakeResult, IntakeService
+from app.learning.log_entry import LogEntryError, LogEntryService
 from app.learning.normal_learner import default_client_factory
 from app.models.enums import OriginPurpose
 from app.ui.case_editor import text_box
-from app.ui.confirm_box import ConfirmBox
+from app.ui.confirm_box import LABEL_TEXT, ConfirmBox, ask_abnormal_basis, save_confirmation
 from app.ui.question_box import QuestionBox
 from app.ui.error_messages_box import ErrorMessagesBox
 from app.ui.log_import_panel import LogImportPanel
@@ -115,9 +117,12 @@ def strip_marker(text: str) -> str:
     return _MARKER.sub("", text, count=1)
 
 
+LIST_WIDTH = 400  # ②·③ 결과 목록 처음 폭(CR-16 UX-02: 파일 이름·결과·확인 단추가 다 보이게)
+NAME_MAX = 240  # 파일 칸 최대 폭(더 긴 이름은 가운데를 줄임)
+
+
 class LogAnalysisPage(QWidget):
     analysis_done = Signal(object)
-    register_requested = Signal(str, list, str)  # (사례 종류, log_file_ids, 제목)
 
     def __init__(self, context: AppContext, client_factory: Callable[[], OllamaClient] | None = None,
                  parent: QWidget | None = None) -> None:
@@ -130,6 +135,8 @@ class LogAnalysisPage(QWidget):
         self._todo: list[list[int]] = []  # 이번 실행에서 남은 분석 단위
         self._run_total = 0
         self._cancel: CancelToken | None = None
+        self._confirmed: dict[tuple[int, ...], str | None] = {}  # 분석 단위 → 저장된 확인 결과(목록 '확인' 칸, CR-16 UX-01)
+        self.ask_basis = ask_abnormal_basis  # 비정상 판단 근거를 묻는 창(시험에서 바꿔 끼움)
 
         self.import_panel = LogImportPanel(context, OriginPurpose.ANALYSIS, status_column="분석 결과", allow_clear=True,
                                            checkable=True, compact=True, detach_views=True)
@@ -262,10 +269,16 @@ class LogAnalysisPage(QWidget):
         self.action_row = QHBoxLayout()
         self.report_button = QPushButton("보고서 저장 (JSON·HTML)")
         self.report_button.clicked.connect(self.save_report)
-        self.register_normal = QPushButton("정상 학습 사례로 등록")
-        self.register_normal.clicked.connect(lambda: self.request_case("NORMAL"))
-        self.register_abnormal = QPushButton("비정상 학습 사례로 등록")
-        self.register_abnormal.clicked.connect(lambda: self.request_case("ABNORMAL"))
+        # CR-16 UX-03: ③에서도 그 자리에서 사례로 저장한다(학습 탭으로 넘기지 않음)
+        self.register_normal = QPushButton("정상이었음으로 저장")
+        self.register_normal.clicked.connect(lambda: self.confirm_unit(self.result_log_ids(), "NORMAL"))
+        self.register_abnormal = QPushButton("비정상이었음으로 저장…")
+        self.register_abnormal.clicked.connect(lambda: self.confirm_unit(self.result_log_ids(), "ABNORMAL"))
+        self.saved_note = QLabel()  # ③ 아래: 방금 저장한 결과. 폭을 요구하지 않아 왼쪽 목록이 줄지 않게(CR-16 UX-02)
+        self.saved_note.setWordWrap(True)
+        self.saved_note.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.saved_note.hide()
+        set_role(self.saved_note, "muted")
         for button in (self.report_button, self.register_normal, self.register_abnormal):
             button.setEnabled(False)
             self.action_row.addWidget(button)
@@ -303,6 +316,8 @@ class LogAnalysisPage(QWidget):
         self.result_list = self._result_list()
         self.detail_list = self._result_list()
         self.confirm_box = ConfirmBox(self.context.database)  # CR-14: 확인 결과를 바로 사례로
+        self.confirm_box.ask = lambda *args: self.ask_basis(*args)
+        self.confirm_box.saved.connect(self._after_confirm)
         self.question_box = QuestionBox(self.context.database)  # CR-15: 애매할 때 판단 기준을 묻기
         self.question_box.reanalyze.connect(self.reanalyze)
 
@@ -361,7 +376,9 @@ class LogAnalysisPage(QWidget):
         right2.setContentsMargins(0, 0, 0, 0)
         right2.addWidget(self.result_scroll, 1)
         right2.addLayout(nav_row(back_to_intake, self.detail_button, self.report_button_summary))
-        step2 = self._split(self._list_box("분석 결과 목록", self.result_list), right2, 300)
+        self.result_split = self._split(self._list_box("분석 결과 목록 — '확인' 칸에서 실제 결과를 바로 남깁니다",
+                                                       self.result_list), right2)
+        step2 = self.result_split
 
         # ③ 상세 확인 — 근거
         self.detail_title = QLabel("결과")
@@ -419,8 +436,14 @@ class LogAnalysisPage(QWidget):
         right3 = QVBoxLayout()
         right3.setContentsMargins(0, 0, 0, 0)
         right3.addWidget(self.detail_scroll, 1)
+        self.saved_note.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        right3.addWidget(self.saved_note)  # 단추 줄 바로 위: 방금 저장한 결과(좁은 화면에서도 한 줄)
         right3.addLayout(nav_row(back_to_summary, self.register_normal, self.register_abnormal, self.report_button))
-        step3 = self._split(self._list_box("분석한 로그", self.detail_list), right3, 220)
+        self.detail_split = self._split(self._list_box("분석한 로그", self.detail_list), right3)
+        step3 = self.detail_split
+        # CR-16 UX-02: ②·③ 목록 폭을 함께 맞춘다(③으로 가도 파일 이름이 줄지 않게)
+        self.result_split.splitterMoved.connect(lambda *_: self._sync_split(self.result_split, self.detail_split))
+        self.detail_split.splitterMoved.connect(lambda *_: self._sync_split(self.detail_split, self.result_split))
 
         self.steps = StepPages("신규 로그 분석", "로그를 넣고 분석해 정상과 다른 점·권장 대응·예상 에러를 확인합니다.",
                                ("로그 넣기", "분석 결과", "상세 확인"))
@@ -436,7 +459,7 @@ class LogAnalysisPage(QWidget):
         self._update_run_button()
 
     # ── 단계 화면 도우미 (CR-12) ──
-    WIDE_RESULT = 1300
+    WIDE_RESULT = 1100  # 목록이 넓어져(CR-16 UX-02) 1300 → 1100
 
     def eventFilter(self, watched, event) -> bool:  # noqa: N802 (Qt 이름 그대로)
         if watched is getattr(self, "result_scroll", None) and event.type() == QEvent.Type.Resize:
@@ -513,30 +536,132 @@ class LogAnalysisPage(QWidget):
         return box
 
     @staticmethod
-    def _split(left: QWidget, right: QVBoxLayout, left_width: int) -> QSplitter:
+    def _split(left: QWidget, right: QVBoxLayout) -> QSplitter:
         right_widget = QWidget()
         right_widget.setLayout(right)
         split = QSplitter(Qt.Orientation.Horizontal)
         split.addWidget(left)
         split.addWidget(right_widget)
-        split.setSizes([left_width, 900])
+        split.setSizes([LIST_WIDTH, 900])
+        split.setStretchFactor(0, 0)
         split.setStretchFactor(1, 1)
         split.setChildrenCollapsible(False)
-        left.setMinimumWidth(200)
+        left.setMinimumWidth(320)
         return split
 
+    @staticmethod
+    def _sync_split(source: QSplitter, target: QSplitter) -> None:
+        sizes, total = source.sizes(), sum(target.sizes())
+        if total > 0 and sizes and target.sizes()[0] != sizes[0]:
+            target.setSizes([sizes[0], max(total - sizes[0], 1)])
+
     def _result_list(self) -> QTableWidget:
-        table = QTableWidget(0, 2)
-        table.setHorizontalHeaderLabels(["파일", "결과"])
+        table = QTableWidget(0, 3)
+        table.setHorizontalHeaderLabels(["파일", "결과", "확인"])
         table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         table.verticalHeader().setVisible(False)
-        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)  # 이름 길이만큼(_fit_name_column)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)  # 칸 위젯은 내용 맞춤에 안 잡혀 단추 폭으로 잰다
+        header.setStretchLastSection(False)
         comfortable_table(table, elide_middle=True)
         table.currentCellChanged.connect(lambda row, *_: self._pick_from_list(table, row))
         return table
+
+    @staticmethod
+    def _fit_name_column(table: QTableWidget) -> None:
+        metrics = table.fontMetrics()
+        names = [table.item(r, 0).text() for r in range(table.rowCount()) if table.item(r, 0) is not None]
+        width = max([metrics.horizontalAdvance(n) for n in names] + [metrics.horizontalAdvance("파일")]) + 28
+        table.setColumnWidth(0, min(width, NAME_MAX))
+
+    # ── 확인 결과 남기기 (CR-14 CM-05, CR-16 UX-01·03) ──
+    def unit_of(self, log_file_id: int) -> list[int]:
+        """그 로그를 분석한 단위(같은 수집 세션 묶음이면 여러 개). 결과가 없으면 그 로그 하나."""
+        result = self.results.get(log_file_id)
+        if result is None:
+            return [log_file_id]
+        return [i for i in self.import_panel.log_file_ids() if self.results.get(i) is result] or [log_file_id]
+
+    def confirmed_label(self, log_ids: list[int]) -> str | None:
+        key = tuple(sorted(log_ids))
+        if key not in self._confirmed:
+            self._confirmed[key] = LogEntryService(self.context.database).group_entry(list(key)).label
+        return self._confirmed[key]
+
+    def confirm_unit(self, log_ids: list[int], label: str) -> bool:
+        """목록 단추·③ 단추: 그 분석 단위를 바로 사례로 저장한다. 비정상은 판단 근거 창(취소하면 저장 안 함)."""
+        if not log_ids:
+            return False
+        result = self.results.get(log_ids[0])
+        hints = self._hints(result) if result is not None else []
+        try:
+            entry = save_confirmation(self.context.database, log_ids, label, None, self.ask_basis, self, hints)
+        except LogEntryError as exc:
+            self.saved_note.setText(str(exc))
+            self.saved_note.show()
+            return False
+        if entry is None:
+            self._refresh_result_lists()  # 눌린 단추를 원래대로
+            return False
+        name = self._file_name(log_ids[0]) + (f" 외 {len(log_ids) - 1}개" if len(log_ids) > 1 else "")
+        self.saved_note.setText(f"{name}: '{LABEL_TEXT[label]}' 사례로 저장했습니다.")
+        self.saved_note.show()
+        self._after_confirm(log_ids)
+        return True
+
+    def _after_confirm(self, log_ids: list) -> None:
+        self._confirmed.clear()  # 묶음·학습 탭 저장과 엇갈리지 않게 통째로 다시 읽는다
+        if self.result is not None and set(log_ids) & set(self.result_log_ids()):
+            self.confirm_box.set_log(self.result_log_ids(), self._memory_note(self.result), self._hints(self.result))
+            self.confirm_box.say(f"'{LABEL_TEXT.get(self.confirm_box.saved_label or '', '-')}' 사례로 저장돼 있습니다. "
+                                 "다음 분석부터 사례 기억에 쓰입니다.")
+        self._refresh_result_lists()
+
+    def showEvent(self, event) -> None:  # noqa: N802 (Qt 이름 그대로)
+        self._confirmed.clear()  # 학습 탭에서 바꾼 저장 상태를 다시 읽는다
+        if self.results:
+            self._refresh_result_lists()
+        super().showEvent(event)
+
+    def _confirm_cell(self, table: QTableWidget, row: int, log_file_id: int) -> None:
+        cell = table.cellWidget(row, 2)
+        if cell is None or cell.property("log_id") != log_file_id:
+            cell = QWidget()
+            cell.setProperty("log_id", log_file_id)
+            layout = QHBoxLayout(cell)
+            layout.setContentsMargins(4, 2, 4, 2)
+            layout.setSpacing(4)
+            for label, text, tone in (("NORMAL", "정상", "ok"), ("ABNORMAL", "비정상", "warn")):
+                button = QPushButton(text)
+                button.setMinimumWidth(button.fontMetrics().horizontalAdvance(text) + 24)  # 칸이 좁아도 글자가 잘리지 않게
+                button.setObjectName(label)
+                button.setCheckable(True)
+                button.setCursor(Qt.CursorShape.PointingHandCursor)
+                set_role(button, "pick", tone)
+                button.clicked.connect(lambda _c=False, i=log_file_id, k=label: self.confirm_unit(self.unit_of(i), k))
+                layout.addWidget(button)
+            table.setCellWidget(row, 2, cell)
+        analyzed = log_file_id in self.results
+        saved = self.confirmed_label(self.unit_of(log_file_id)) if analyzed else None
+        for button in cell.findChildren(QPushButton):
+            label = button.objectName()
+            button.setEnabled(analyzed)
+            button.setChecked(saved == label)
+            button.setToolTip(("저장됨 — " if saved == label else "")
+                              + (f"이 로그를 {LABEL_TEXT[label]} 사례로 저장(확인 결과 남기기)"
+                                 + (" · 판단 근거를 묻습니다" if label == "ABNORMAL" else "") if analyzed else
+                                 "분석한 뒤에 남길 수 있습니다"))
+
+    @staticmethod
+    def _memory_note(result: AnalysisResult) -> str:
+        return result.memory.note() if getattr(result, "memory", None) is not None else ""
+
+    def _hints(self, result: AnalysisResult) -> list[str]:
+        return [m.text for m in self.error_messages(result)][:3]
 
     def _pick_from_list(self, table: QTableWidget, row: int) -> None:
         item = table.item(row, 0) if row >= 0 else None
@@ -560,9 +685,14 @@ class LogAnalysisPage(QWidget):
                     name.setToolTip(tooltip)
                 table.setItem(row, 0, name)
                 table.setItem(row, 1, state)
+                self._confirm_cell(table, row, record.id)
                 if record.id == current:
                     table.setCurrentCell(row, 0)
                     table.selectRow(row)
+            self._fit_name_column(table)
+            if table.rowCount():
+                buttons = table.cellWidget(0, 2).findChildren(QPushButton)
+                table.setColumnWidth(2, sum(b.minimumWidth() for b in buttons) + 4 * len(buttons) + 20)
             table.blockSignals(False)
 
     def _set_status(self, log_file_id: int, text: str, tone: str | None = None, tooltip: str | None = None) -> None:
@@ -853,7 +983,9 @@ class LogAnalysisPage(QWidget):
         self.result = result
         self._show_title()
         self.confirm_box.set_log(self.result_log_ids(),  # 같은 수집 세션 묶음이면 묶음 전체를 사례 하나로(리뷰 2026-11-22)
-                                 result.memory.note() if getattr(result, "memory", None) is not None else "")
+                                 self._memory_note(result), self._hints(result))
+        self.saved_note.clear()
+        self.saved_note.hide()
         self.question_box.set_questions(list(getattr(result, "questions", []) or []), self.result_log_ids(), result.run_id)
         guidance = result.guidance
         self.guidance_box.setTitle(GUIDANCE_TITLES[guidance.level])
@@ -1020,14 +1152,6 @@ class LogAnalysisPage(QWidget):
         paths = save_reports(self.context.database, self.context.paths, self.result.run_id)
         self.report_label.setText(f"보고서를 저장했습니다: {self.context.paths.root / paths[1]}")
         return paths
-
-    def request_case(self, case_type: str) -> None:
-        """분석한 로그로 학습 사례 초안을 만들도록 메인 창에 요청한다(§3.3 14단계)."""
-        if self.result is None:
-            return
-        kind = "정상" if case_type == "NORMAL" else "비정상"
-        self.register_requested.emit(case_type, self.result_log_ids() or self.import_panel.log_file_ids(),
-                                     f"R-{self.result.run_id:04d}에서 등록한 {kind} 사례")
 
     def show_ai(self, result: AnalysisResult) -> None:
         outcome = result.ai

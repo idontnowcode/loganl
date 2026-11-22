@@ -34,7 +34,7 @@ def render_html(data: dict[str, Any]) -> str:
         f"상태 {_e(run['status'])} · 가장 비슷한 승인 정상 로그와 비교</div>",  # CR-09: 운전 모드로 나누지 않는다
         f"<h2>최종 판정 — {_e(data['verdict']['title'])}</h2><ul>"
         + "".join(f"<li>{_e(reason)}</li>" for reason in data["verdict"]["reasons"])
-        + "".join(f"<li>{_e(data['verdict'][k])}</li>" for k in ("memory", "ai") if data["verdict"].get(k)) + "</ul>",
+        + "".join(f"<li>{_e(data['verdict'][k])}</li>" for k in ("memory", "reference", "ai") if data["verdict"].get(k)) + "</ul>",
         f"<h2>권장 대응 — {_e(data['axes']['response_guidance']['text'])}</h2><div class='{level_class}'>",
     ]
     if guidance["items"]:

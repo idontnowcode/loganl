@@ -162,6 +162,16 @@ QPushButton[role="nav-item"] {{ background: transparent; border: none; border-ra
 QPushButton[role="nav-item"]:hover {{ background: {t['neutral_soft']}; }}
 QPushButton[role="nav-item"]:checked {{ background: {t['accent_soft']}; color: {t['accent']}; font-weight: 700; }}
 QPushButton[role="nav-item"]:focus {{ border: none; }}
+QPushButton[role="nav-back"] {{ background: transparent; border: 1px solid {t['line']}; border-radius: 6px;
+                                padding: 5px 10px; text-align: left; color: {t['ink2']}; }}
+QPushButton[role="nav-back"]:hover {{ background: {t['neutral_soft']}; color: {t['ink']}; }}
+QPushButton[role="nav-back"]:disabled {{ color: #A4ABB3; background: transparent; border-color: {t['line']}; }}
+/* 결과 목록 '확인' 칸의 작은 단추(CR-16 UX-01): 저장한 쪽은 눌린 모양 + 판정 색 */
+QPushButton[role="pick"] {{ padding: 2px 8px; min-height: 16px; border-radius: 5px; }}
+QPushButton[role="pick"][tone="ok"]:checked {{ color: {t['ok']}; background: {t['ok_soft']}; border: 1px solid {t['ok_line']};
+                                               font-weight: 700; }}
+QPushButton[role="pick"][tone="warn"]:checked {{ color: {t['warn']}; background: {t['warn_soft']};
+                                                 border: 1px solid {t['warn_line']}; font-weight: 700; }}
 QPushButton[role="step"] {{ border-radius: 16px; padding: 6px 18px; font-weight: 600; color: {t['ink2']};
                            background: {t['surface']}; border: 1px solid {t['line_input']}; }}
 QPushButton[role="step"][state="current"] {{ background: {t['accent']}; color: #FFFFFF; border: 1px solid {t['accent']}; }}

@@ -43,15 +43,13 @@ def test_report_and_register_case_from_analysis(qtbot, ctx, knowledge, tmp_path:
     page = window.analysis_page
     rel_json, rel_html = page.save_report()
     assert (ctx.paths.root / rel_html).exists() and "보고서를 저장" in page.report_label.text()
-    page.request_case("ABNORMAL")  # CR-06 LI-08: 로그 입력 탭에 올리고 '비정상'을 미리 골라 둔다
-    entry = window.entry_page
-    assert window.tabs.currentWidget() is entry
-    ids = page.import_panel.log_file_ids()
-    assert entry.import_panel.log_file_ids() == ids and entry.selected_ids() == ids
-    assert entry.abnormal_radio.isChecked() and entry.criteria_edit.isVisibleTo(entry)
-    entry.criteria_edit.setPlainText("가상: TEST-E001이 반복돼 에러로 봄")
-    assert entry.save_selected()
-    case = CaseManager(ctx.database).get(entry.service.entry(ids[0]).case_id)
+    window.tabs.setCurrentWidget(page)
+    page.steps.go(2)
+    page.ask_basis = lambda *args: ("가상: TEST-E001이 반복돼 에러로 봄", "")
+    page.register_abnormal.click()  # CR-16 UX-03: ③에서 그 자리에서 저장(학습 탭으로 넘기지 않음)
+    assert window.tabs.currentWidget() is page and page.steps.current() == 2
+    ids = page.result_log_ids()
+    case = CaseManager(ctx.database).get(window.entry_page.service.entry(ids[0]).case_id)
     assert case.case_type == "ABNORMAL" and case.status == "APPROVED"
 
 

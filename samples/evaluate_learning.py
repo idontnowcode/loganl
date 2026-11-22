@@ -11,6 +11,8 @@
 정답률은 판단한 것(보류 제외) 중 맞힌 비율이고, 보류 수를 함께 보인다(리뷰 2026-11-22).
 --answer-questions: 분석 뒤 '판단을 돕는 질문'(CR-15)에 정답표를 아는 가상 엔지니어가 답한다. 정상 로그면 '정상에서도 나옴',
 비정상 로그면 물은 근거(특징·원문 줄·값 칸)가 판단 가이드의 낱말과 겹칠 때만 '문제의 표시', 아니면 '모름'(저장 안 함).
+--reference 표 파일: 시험 전에 참고 자료로 올려 승인한다(CR-16 RJ-07, '판정' 열이 있으면 판정에 쓰임).
+--train-limit N: 학습용 앞 N개만 저장한다(학습이 적을 때).
 
 실행: uv run python samples/evaluate_learning.py <학습용 폴더> <시험용 폴더> [--ai] [--model gemma3:4b] [--no-memory]
       [--seed 순서 씨앗] [--json 결과 파일] [--data 임시 폴더]
@@ -81,11 +83,15 @@ def main() -> None:
     parser.add_argument("--no-memory", action="store_true", help="사례 기억을 끄고(CR-14 이전과 같게) 잰다")
     parser.add_argument("--answer-questions", action="store_true", help="판단 질문에 정답표로 답한다(CR-15)")
     parser.add_argument("--seed", default="", help="시험 순서를 섞을 씨앗(없으면 파일 순서)")
+    parser.add_argument("--reference", type=Path, action="append", default=[], help="참고 자료로 올려 승인할 파일(CR-16)")
+    parser.add_argument("--train-limit", type=int, default=None, help="학습용 앞 N개만 저장")
     parser.add_argument("--json", type=Path, default=None)
     parser.add_argument("--data", type=Path, default=Path(tempfile.gettempdir()))
     args = parser.parse_args()
     args.data.mkdir(parents=True, exist_ok=True)
     train, test = read_rows(args.train), read_rows(args.test)
+    if args.train_limit is not None:
+        train = train[:args.train_limit]
     if args.seed:
         random.Random(args.seed).shuffle(test)
     home = Path(tempfile.mkdtemp(prefix="learn_", dir=args.data))
@@ -111,6 +117,14 @@ def main() -> None:
             else:
                 entries.save(log_id, "ABNORMAL", cells[2], cells[3] if len(cells) > 3 and cells[3] else "비정상")
 
+        if args.reference:
+            from app.learning.reference_library import ReferenceLibrary
+
+            library = ReferenceLibrary(ctx.database, ctx.paths, ctx.settings.import_)
+            for path in args.reference:
+                outcome = library.import_file(path)
+                library.approve(outcome.document_id)
+                print(f"참고 자료: {path.name} 항목 {outcome.entries}개 승인", flush=True)
         started = time.perf_counter()
         for cells in train:
             confirm(load(args.train, cells), cells)
@@ -142,6 +156,7 @@ def main() -> None:
                 "neighbors": [(round(s, 2), c.case.case_type) for s, c, _f in (memory.neighbors if memory else [])][:3],
                 "memory_on": bool(memory and memory.calibration and memory.calibration.tau is not None),
                 "hypotheses": [h.text for h in answer.hypotheses][:2] if answer is not None else [],
+                "reference": bool(result.reference_judgment is not None and result.reference_judgment.used),
             }
             asked, answered = len(result.questions), 0
             if args.answer_questions:
@@ -156,6 +171,7 @@ def main() -> None:
             mark = lambda said: "-" if said is None else ("O" if said == row["truth"] else "X")  # noqa: E731
             print(f"  {index:>2} {cells[0]} {'비정상' if row['truth'] else '정상  '} 규칙 {mark(row['rule'])} 최종 {mark(row['final'])}"
                   + (f" AI {mark(row['ai'])}({likelihood}) 보정 {mark(row['ai_cal'])}(문턱 {row['ai_threshold']})" if args.ai else "")
+                  + (" 참고자료" if row["reference"] else "")
                   + (f" 질문 {asked}(답 {answered})" if asked else "") + f" {row['seconds']}초", flush=True)
             if index % 10 == 0 or index == len(test):
                 print(f"  ── 1~{index} 누적: 규칙만 {accuracy(results, 'rule')} · 최종 {accuracy(results, 'final')}"

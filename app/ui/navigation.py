@@ -36,12 +36,33 @@ class SideNav(QFrame):
         self._layout.setSpacing(2)
         self.pages: list[QPushButton] = []
         self.actions: dict[str, QPushButton] = {}
+        self.back_button: QPushButton | None = None
+        self._groups = 0
+
+    def add_back(self, handler: Callable[[], None]) -> QPushButton:
+        """맨 위 '뒤로' 단추(CR-16 UX-04): 앞에 보던 화면(작업 화면 + 단계)으로. 이력이 없으면 흐리다."""
+        button = QPushButton("‹  뒤로")
+        button.setToolTip("앞에 보던 화면으로 돌아갑니다 (Alt+←)")
+        button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.setEnabled(False)
+        set_role(button, "nav-back")
+        button.clicked.connect(handler)
+        self._layout.addWidget(button)
+        self._layout.addSpacing(12)
+        self.back_button = button
+        return button
+
+    def set_back_enabled(self, enabled: bool) -> None:
+        if self.back_button is not None:
+            self.back_button.setEnabled(enabled)
 
     def add_group(self, title: str) -> None:
         """섹션 머리: 작고 옅은 굵은 글씨, 앞 섹션과는 구분선과 넉넉한 여백으로 나눈다(항목과 헷갈리지 않게, 2026-11-22)."""
         label = QLabel(title)
         set_role(label, "nav-group")
-        if self._layout.count():
+        self._groups += 1
+        if self._groups > 1:
             self._layout.addSpacing(12)
             rule = QFrame()
             set_role(rule, "nav-rule")

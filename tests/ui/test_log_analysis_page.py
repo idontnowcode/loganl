@@ -5,7 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QPushButton
 
+from app.learning.log_entry import LogEntryService
 from app.models.enums import OriginPurpose
 from app.ui.log_analysis import LogAnalysisPage
 from tests.integration.test_analysis import ctx, knowledge, load  # noqa: F401 (픽스처 재사용)
@@ -137,10 +140,24 @@ def test_only_new_logs_are_analyzed_and_case_uses_selected_log(qtbot, ctx, knowl
     with qtbot.waitSignal(page.analysis_done, timeout=15_000) as signal:
         page.start_analysis()
     assert page.results[first[0]] is kept and page.results[second[0]] is signal.args[0]
+    # CR-16 UX-01: 결과 목록 '확인' 칸 단추로 그 자리에서 사례 저장(학습 탭으로 넘기지 않음)
+    row = next(r for r in range(page.result_list.rowCount())
+               if page.result_list.item(r, 0).data(Qt.ItemDataRole.UserRole) == second[0])
+    cell = page.result_list.cellWidget(row, 2)
+    normal = cell.findChild(QPushButton, "NORMAL")
+    assert normal.isEnabled() and not normal.isChecked()
+    normal.click()
+    assert LogEntryService(ctx.database).entry(second[0]).label == "NORMAL"
+    assert page.result_list.cellWidget(row, 2).findChild(QPushButton, "NORMAL").isChecked()
+    assert page.detail_list.cellWidget(row, 2).findChild(QPushButton, "NORMAL").isChecked()  # ③ 목록도 같이
     asked = []
-    page.register_requested.connect(lambda *args: asked.append(args))
-    page.request_case("NORMAL")
-    assert asked[0][1] == second  # 고른 로그의 결과로 등록
+    page.ask_basis = lambda *args: asked.append(args) or None  # 비정상: 근거 창을 닫으면 저장 안 함
+    page.result_list.cellWidget(row, 2).findChild(QPushButton, "ABNORMAL").click()
+    assert asked and LogEntryService(ctx.database).entry(second[0]).label == "NORMAL"
+    page.ask_basis = lambda *args: ("가상: 목록에서 남긴 근거", "")
+    page.register_abnormal.click()  # ③ 단추도 그 자리에서
+    assert LogEntryService(ctx.database).entry(second[0]).criteria == "가상: 목록에서 남긴 근거"
+    assert "비정상' 사례로 저장" in page.saved_note.text()
     page.import_panel.clear_list()  # 목록 비우기(LI-12)
     assert page.results == {} and page.result is None and page.run_button.text() == "분석 실행"
 
@@ -242,17 +259,16 @@ def test_confirm_result_saves_case_from_result_step(qtbot, ctx, knowledge, tmp_p
         page.start_analysis()
     box = page.confirm_box
     assert not box.isHidden() and box.log_file_id == ids[0] and "사례 판단" in box.memory.text()
-    box.abnormal.setChecked(True)
-    assert not box.save_button.isEnabled()  # 비정상인데 원인 글이 없음
+    box.ask = lambda *args: None  # 비정상인데 글이 비었으면 근거를 묻는다 — 닫으면 저장하지 않음
+    assert not box.save("ABNORMAL") and "저장하지 않았습니다" in box.status.text()
     box.text.setText("TEST-SUB 재시도 뒤 같은 코드 반복(가상)")
-    assert box.save_button.isEnabled()
     with qtbot.waitSignal(box.saved, timeout=5_000):
-        box.save_button.click()
+        box.abnormal_button.click()
     entry = LogEntryService(ctx.database).entry(ids[0])
     assert entry.label == "ABNORMAL" and entry.saved and entry.criteria == "TEST-SUB 재시도 뒤 같은 코드 반복(가상)"
-    assert "사례로 저장했습니다" in box.status.text()
+    assert "사례로 저장" in box.status.text()
     box.set_log(ids[0])  # 다시 보면 저장한 판정·글이 채워져 있다
-    assert box.abnormal.isChecked() and box.text.text().startswith("TEST-SUB") and "이미 '비정상'" in box.status.text()
+    assert box.saved_label == "ABNORMAL" and box.text.text().startswith("TEST-SUB") and "이미 '비정상'" in box.status.text()
 
 
 def test_confirm_keeps_memo_and_saves_same_session_as_one_case(qtbot, ctx, knowledge, tmp_path: Path) -> None:  # noqa: F811  리뷰 2026-11-22
@@ -267,9 +283,9 @@ def test_confirm_keeps_memo_and_saves_same_session_as_one_case(qtbot, ctx, knowl
     page = LogAnalysisPage(ctx)
     qtbot.addWidget(page)
     page.confirm_box.set_log(single)
-    assert page.confirm_box.abnormal.isChecked() and page.confirm_box.text.text() == "가상 판단 근거 1"
+    assert page.confirm_box.saved_label == "ABNORMAL" and page.confirm_box.text.text() == "가상 판단 근거 1"
     page.confirm_box.text.setText("가상 판단 근거 2")
-    page.confirm_box.save()
+    page.confirm_box.save("ABNORMAL")
     entry = service.entry(single[0])
     assert entry.criteria == "가상 판단 근거 2" and entry.memo == "운전 조건: 가상 고속"  # 메모가 지워지지 않음
 
@@ -281,11 +297,10 @@ def test_confirm_keeps_memo_and_saves_same_session_as_one_case(qtbot, ctx, knowl
         page.start_analysis()
     assert page.result.memory is not None and "사례 판단" in page.confirm_box.memory.text()  # 묶음에도 사례 기억
     box = page.confirm_box
-    assert box.log_ids == sorted(ids) and "묶음 2개" in box.save_button.text()
-    box.abnormal.setChecked(True)
+    assert box.log_ids == sorted(ids) and "묶음" in box.normal_button.text()
     box.text.setText("묶음 가상 판단 근거")
     with qtbot.waitSignal(box.saved, timeout=5_000):
-        box.save_button.click()
+        box.abnormal_button.click()
     case = service.group_case(ids)
     assert case is not None and case.case_type == "ABNORMAL" and case.status == "APPROVED"
     assert service.group_entry(ids).criteria == "묶음 가상 판단 근거"

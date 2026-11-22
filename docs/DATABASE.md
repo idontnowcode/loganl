@@ -265,3 +265,8 @@ audit_history (모든 엔터티의 승인·수정·삭제 기록, 추가 전용)
 - **승인 사례 수정 중**(수정 시작 → DRAFT)에는 승인 뷰에서 빠진다. 다시 승인하면 개정본이 하나 늘고 이전 개정본은 보존된다(§5 미결 항목을 결정함).
 - **AI 대응 순서**(response_plan)는 `analysis_evidence.finding_type = 'AI_VERIFICATION_STEP'`에 `detail_json.role = 'RESPONSE_PLAN'`으로 저장한다. AI 확인 절차는 `role = 'VERIFICATION'`이다. 전용 열거값을 더하려면 CHECK 제약 때문에 테이블을 다시 만들어야 해서 지금은 role로 구분한다.
 - AI 진단 근거 키는 `EV-…`(계층 1·2, 저장된 근거)와 `AI-…`(계층 3 출력)로 나눈다. AI 주장은 `knowledge_claims.analysis_run_id`에 묶이고, 근거는 `claim_evidence.analysis_evidence_id`로 가리킨다.
+
+## 0009 참고 자료 판정 칸 (CR-16 RJ-01, 2026-11-23)
+
+- `reference_entries.judgment TEXT` — 문서의 판정 낱말 그대로(예: 에러·정상). 분석은 `judgment_side`로 비정상·정상·안 씀으로만 읽는다.
+- `approved_reference_entries` 뷰를 다시 만든다(같은 정의). 승인된 문서 항목 잠금(0005 트리거)은 그대로.

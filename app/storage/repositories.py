@@ -189,6 +189,25 @@ class EventRepository:
             params = (*params, limit, offset)
         return [EventRecord.model_validate(dict(r)) for r in self.conn.execute(sql, params)]
 
+    def files_with(self, log_file_ids: Sequence[int], *, code_norm: str | None = None, text: str | None = None) -> set[int]:
+        """그 로그들 중 오류 코드 칸(공백 빼고 대문자)이 code_norm이거나 메시지에 text(소문자로 비교)가 든 로그 id.
+        참고 자료 판정의 스스로 점검(CR-16 RJ-05)에 쓴다."""
+        if not log_file_ids or not (code_norm or text):
+            return set()
+        conditions, params = [], []
+        if code_norm:
+            conditions.append("upper(replace(error_code, ' ', '')) = ?")
+            params.append(code_norm)
+            conditions.append("instr(upper(message), ?) > 0")
+            params.append(code_norm)
+        if text:
+            conditions.append("instr(lower(message), ?) > 0")
+            params.append(text.lower())
+        rows = self.conn.execute(
+            f"SELECT DISTINCT log_file_id FROM events WHERE log_file_id IN ({placeholders(log_file_ids)})"
+            f" AND ({' OR '.join(conditions)})", (*log_file_ids, *params)).fetchall()
+        return {int(r[0]) for r in rows}
+
     def for_files(self, log_file_ids: Sequence[int]) -> dict[int, list[EventRecord]]:
         result: dict[int, list[EventRecord]] = {i: [] for i in log_file_ids}
         if not log_file_ids:
@@ -774,7 +793,7 @@ class RevisionRepository:
                                  (case_id,)).fetchall()
 
 
-REFERENCE_ENTRY_FIELDS = ("code", "title", "description", "cause", "action", "locator", "source_text")
+REFERENCE_ENTRY_FIELDS = ("code", "title", "description", "cause", "action", "locator", "source_text", "judgment")
 
 
 class ReferenceRepository:
@@ -830,9 +849,10 @@ class ReferenceRepository:
         now = utc_now_iso()
         cur = self.conn.execute(
             "INSERT INTO reference_entries (document_id, code, code_norm, title, description, cause, action, locator,"
-            " source_text, source_kind, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " source_text, judgment, source_kind, sort_order, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (document_id, code, code_norm, values["title"], values["description"], values["cause"], values["action"],
-             values["locator"], values["source_text"], source_kind, sort_order, now, now))
+             values["locator"], values["source_text"], values["judgment"], source_kind, sort_order, now, now))
         return int(cur.lastrowid)
 
     def entries(self, document_id: int) -> list[sqlite3.Row]:
