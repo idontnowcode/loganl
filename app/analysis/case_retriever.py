@@ -105,10 +105,13 @@ def compare(input_files: Sequence[FileFeatures], case_files: Sequence[FileFeatur
 
 
 def find_similar(database: Database, input_files: Sequence[FileFeatures], case_type: str, mode_id: int | None,
-                 limit: int = 5, seen_types: set[str] | None = None) -> list[SimilarCase]:
-    """seen_types를 주면 살펴본 모든 사례 로그의 이벤트 유형을 모아 둔다(정상 로그 전체에 있던 경고인지 보려고, DT-18)."""
+                 limit: int = 5, seen_types: set[str] | None = None,
+                 exclude_case_ids: frozenset[int] = frozenset()) -> list[SimilarCase]:
+    """seen_types를 주면 살펴본 모든 사례 로그의 이벤트 유형을 모아 둔다(정상 로그 전체에 있던 경고인지 보려고, DT-18).
+    exclude_case_ids의 사례는 보지 않는다(사례 로그의 지문을 다시 만들 때 자기 자신, CR-14)."""
     with closing(database.connect()) as conn:
-        candidates = CaseRepository(conn).approved(case_type=case_type, mode_id=mode_id)
+        candidates = [c for c in CaseRepository(conn).approved(case_type=case_type, mode_id=mode_id)
+                      if c.id not in exclude_case_ids]
     codes = sorted(set().union(*(f.error_codes for f in input_files))) if input_files else []
     results: list[SimilarCase] = []
     for case in candidates:

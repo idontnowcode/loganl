@@ -96,7 +96,8 @@ class AnalysisHistoryDialog(QDialog):
     def show_row(self, row: int) -> None:
         if not (0 <= row < len(self.runs)):
             return
-        self.view.setPlainText(report_text(load_report(self.context.database, self.runs[row]["id"])))
+        self.view.setPlainText(report_text(load_report(self.context.database, self.runs[row]["id"],
+                                                                 self.context.paths.analysis)))
 
     def save_selected(self) -> tuple[str, str] | None:
         run_id = self.selected_run()

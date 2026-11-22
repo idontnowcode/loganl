@@ -130,7 +130,7 @@ def test_unsupported_items_are_dropped_not_whole_answer(with_model, knowledge, t
     assert any(gone in u for u in value.unknowns) is moved
     assert value.observations and value.hypotheses  # 어긋나지 않은 항목은 그대로 쓴다
     assert value.abnormal_likelihood is None
-    assert [s.text for s in value.response_plan][:1] == ["가상 장비를 대기 상태로 둔다"]  # 나머지는 그대로
+    assert "가상 장비를 대기 상태로 둔다" in value.response_plan[0].text  # 남은 조치는 승인된 원문 그대로
 
 
 def test_request_sets_context_length_for_long_prompt(with_model, knowledge, tmp_path: Path) -> None:
@@ -181,3 +181,34 @@ def test_order_between_unmerged_files_is_rejected(with_model, knowledge, tmp_pat
         AnalysisRequest(ids, mode_id=mode_id, mode_confirmed=True))
     assert result.ai.status == "VALIDATION_FAILED" and any(e.startswith("V-7") for e in result.ai.errors)
     assert errors
+
+
+def test_case_memory_goes_first_in_ai_evidence(with_model, knowledge, tmp_path: Path) -> None:  # CR-14 CM-04
+    """근거 지문이 비슷한 확인 로그(판정·판단 가이드)가 근거 목록 맨 앞에, 근거별 실적이 CM-0001로 들어가고,
+    지시문이 그것을 가장 중요하게 보라고 한다. 화면과 같이 운전 모드 없이 분석한다."""
+    ids = load(with_model, [abnormal_log(tmp_path / "bad.log", start_second=70)], OriginPurpose.ANALYSIS)
+    fake = FakeOllama([{"unknowns": ["가상"]}] * 3)
+    result = DiagnosticEngine(with_model.database, with_model.paths, with_model.settings, fake.factory).run(
+        AnalysisRequest(ids))
+    assert result.memory is not None and result.memory.neighbors  # 같은 오류 코드를 가진 확인된 비정상 사례
+    system, prompt = (m["content"] for m in fake.requests[0]["messages"])
+    assert "근거 지문이 비슷한 확인 로그" in system and "근거별 실적" in system
+    evidence = prompt.split("근거 목록:", 1)[1]
+    first_memory = evidence.index("근거 지문이 비슷한 확인 로그")
+    assert first_memory < evidence.index("[EXPLICIT_ERROR]")  # 결정론 근거보다 앞
+    assert "판단 가이드" in evidence[first_memory:first_memory + 600]  # 확인 로그의 원인 글이 붙음
+    assert "CM-0001" in evidence and "확인된 비정상" in evidence
+
+
+def test_response_steps_show_only_approved_wording(with_model, knowledge, tmp_path: Path) -> None:  # 리뷰 2026-11-22
+    """AI가 원인 가이드(GUIDE) 키만 붙이고 지어낸 조치 문장은 버리고, 승인된 조치(RESPONSE) 키를 붙였으면
+    AI가 고쳐 쓴 문장 대신 그 조치의 원문을 보인다."""
+    keys = keys_for(with_model, knowledge, tmp_path)
+    answer = good_answer(keys)
+    answer["response_plan"] = [{"text": "가상 커넥터를 즉시 교체한다", "evidence": [keys["cause"]]},
+                               {"text": "장비를 쉬게 한다(AI가 고쳐 씀)", "evidence": [keys["step"]]}]
+    result, _fake = analyze(with_model, knowledge, tmp_path / "2", [answer])
+    plan = result.ai.answer.response_plan
+    assert result.ai.status == "OK" and len(plan) == 1
+    assert "가상 장비를 대기 상태로 둔다" in plan[0].text and "고쳐 씀" not in plan[0].text
+    assert all("교체" not in step.text for step in plan)

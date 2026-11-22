@@ -106,6 +106,68 @@ class LogEntryService:
         return LogEntry(log_file_id, name, case.id, case.case_type, case.operating_conditions or "",
                         case.abnormal_criteria or "", case.status, case.current_revision, case.approved_at)
 
+    # ── 묶음(같은 수집 세션으로 함께 분석한 로그) ── CR-14 리뷰: 묶어 분석한 로그도 한 사례로 확인 결과를 남긴다
+    def group_case(self, log_file_ids: Sequence[int]) -> CaseRecord | None:
+        """로그 묶음과 같은 로그들이 걸린, 보관·반려가 아닌 사례(가장 최근 것)."""
+        wanted = sorted(set(log_file_ids))
+        if not wanted:
+            return None
+        with closing(self.database.connect()) as conn:
+            repo = CaseRepository(conn)
+            rows = conn.execute("SELECT case_id FROM case_log_files WHERE log_file_id = ? ORDER BY case_id DESC",
+                                (wanted[0],)).fetchall()
+            for row in rows:
+                case = repo.get(int(row[0]))
+                if case is not None and case.status not in ("ARCHIVED", "REJECTED")                         and sorted(repo.log_file_ids(case.id)) == wanted:
+                    return case
+        return None
+
+    def group_entry(self, log_file_ids: Sequence[int]) -> LogEntry:
+        """묶음의 확인 상태(첫 로그 id·묶음 이름으로). 로그 하나면 entry와 같다."""
+        ids = sorted(set(log_file_ids))
+        if len(ids) == 1:
+            return self.entry(ids[0])
+        return self._entry(ids[0], self._group_name(ids), self.group_case(ids))
+
+    def save_group(self, log_file_ids: Sequence[int], label: str, memo: str, criteria: str = "") -> LogEntry:
+        """묶음 전체를 사례 하나로 저장(학습 탭 저장과 같은 승인 흐름). 로그 하나면 save와 같다."""
+        ids = sorted(set(log_file_ids))
+        if len(ids) == 1:
+            return self.save(ids[0], label, memo, criteria)
+        if label not in LABELS:
+            raise LogEntryError("정상인지 비정상인지 골라 주세요.")
+        memo, criteria = memo.strip(), criteria.strip()
+        fields: dict[str, object] = {"operating_conditions": memo or None}
+        if label == "ABNORMAL":
+            fields.update(symptom=criteria or None, abnormal_criteria=criteria or None)
+        title = entry_title(self._group_name(ids), memo)
+        before = self.group_case(ids)
+        try:
+            case_id = before.id if before is not None else None
+            if before is not None and before.case_type != label:
+                self.workflow.archive(before.id)
+                case_id = None
+            if case_id is None:
+                case_id = self.cases.create(label, title, ids, **fields)
+            else:
+                current = self.cases.get(case_id)
+                unchanged = all(getattr(current, k) == v for k, v in fields.items())
+                if current.status == "APPROVED":
+                    if unchanged:
+                        return self.group_entry(ids)
+                    self.workflow.reopen(case_id)
+                self.cases.update(case_id, title=title, **fields)
+            self.workflow.approve(case_id, change_summary="분석 결과에서 묶음으로 저장")
+        except (ApprovalError, CaseError) as exc:
+            raise LogEntryError(str(exc)) from exc
+        return self.group_entry(ids)
+
+    def _group_name(self, ids: Sequence[int]) -> str:
+        with closing(self.database.connect()) as conn:
+            records = {r.id: r.original_name for r in LogFileRepository(conn).get_many(list(ids))}
+        first = records.get(ids[0], f"파일 {ids[0]}")
+        return first if len(ids) == 1 else f"{first} 외 {len(ids) - 1}개(같은 수집 세션)"
+
     # ── 저장 ──
     def save(self, log_file_id: int, label: str, memo: str, criteria: str = "") -> LogEntry:
         if label not in LABELS:

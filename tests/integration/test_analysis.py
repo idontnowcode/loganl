@@ -118,7 +118,8 @@ def test_guide_only_and_none_levels(ctx, tmp_path: Path) -> None:  # T-NA-12·13
     unrelated = load(ctx, [write(tmp_path / "z.log", iso_lines([("INFO", "TEST-OTHER", "TEST-UNRELATED")]))],
                      OriginPurpose.ANALYSIS)
     none = run(ctx, unrelated, None, False)
-    assert none.guidance.level == "NONE" and "등록된 대응 방법" in none.guidance.message
+    assert none.guidance.level == "NONE" and "대응을 붙이지 않았습니다" in none.guidance.message
+    assert none.verdict.state == "UNDECIDED"  # 비교할 정상 로그가 없음 → 판단 보류(대응도 붙이지 않음)
 
 
 def test_no_knowledge_is_not_evaluated(ctx, tmp_path: Path) -> None:  # T-NA-05
@@ -189,3 +190,18 @@ def test_cancel_marks_run(ctx, tmp_path: Path) -> None:
         DiagnosticEngine(ctx.database, ctx.paths, ctx.settings).run(AnalysisRequest(ids, use_ai=False), token)
     with closing(ctx.database.connect()) as conn:
         assert AnalysisRepository(conn).list()[0]["status"] == "CANCELLED"
+
+
+def test_response_shows_only_for_abnormal_with_applicable_case(ctx, knowledge, tmp_path: Path) -> None:  # 리뷰 2026-11-22
+    """정상 로그에는 승인된 비정상 대응을 붙이지 않고, 같은 오류 코드처럼 적용 근거가 확인된 사례일 때만 붙인다."""
+    normal = load(ctx, [normal_log(tmp_path / "ok.log", start_second=40)], OriginPurpose.ANALYSIS)
+    calm = run(ctx, normal, None, False)
+    assert calm.axes["anomaly_level"] == "NONE_FOUND"
+    assert calm.verdict.state == "UNDECIDED" and "로그가 짧아" in calm.verdict.reasons[0]  # 가상 정상 로그는 5줄(DT-20)
+    assert calm.guidance.level == "NONE" and "대응을 붙이지 않았습니다" in calm.guidance.message
+    assert not any(f.finding_type == "RESPONSE_REFERENCE" for f in calm.findings)  # AI에도 대응 근거가 가지 않음
+    bad = load(ctx, [abnormal_log(tmp_path / "bad.log", start_second=50)], OriginPurpose.ANALYSIS)
+    hit = run(ctx, bad, None, False)
+    assert hit.verdict.state == "ABNORMAL" and hit.guidance.level == "MANUAL"
+    assert "적용할 근거가 확인된" in hit.guidance.message
+    assert "같은 오류 코드 TEST-E001" in hit.guidance.message or "근거 지문이 비슷함" in hit.guidance.message

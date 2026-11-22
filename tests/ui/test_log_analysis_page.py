@@ -215,7 +215,7 @@ def test_three_steps_lock_move_and_jump(qtbot, ctx, knowledge, tmp_path: Path) -
     assert good not in page.results and page.import_panel.status_of(good)[0] == "—"
     assert page.result_list.rowCount() == 2 and page.result_list.item(0, 1).text().startswith("비정상 의심")
     assert page.verdict.text() == "비정상 의심" and page.verdict.property("tone") == "warn"
-    assert "에러로 기록된 줄" in page.evidence_summary.text() and "AI 가능성 없음" in page.evidence_summary.text()
+    assert "에러로 기록된 줄" in page.evidence_summary.text() and "AI 의견 없음" in page.evidence_summary.text() and "판정 이유" in page.evidence_summary.text()
     assert len(page.error_preview.messages) <= 3 and not page.error_preview.isHidden()
     assert page.guidance_detail_list.count() == page.guidance_list.count()  # ③에도 권장 대응
     page.result_list.setCurrentCell(1, 0)  # 목록에서 다른 로그 → 아직 결과 없음
@@ -226,3 +226,66 @@ def test_three_steps_lock_move_and_jump(qtbot, ctx, knowledge, tmp_path: Path) -
     page.steps.go(1)
     assert page.jump_to_finding(row)  # 근거에서 원본 행 → ③으로 가서 로그 원문을 편다
     assert page.steps.current() == 2 and page.import_panel.views_section.is_expanded()
+
+
+def test_confirm_result_saves_case_from_result_step(qtbot, ctx, knowledge, tmp_path: Path) -> None:  # noqa: F811  CR-14 CM-05
+    """② 분석 결과에서 바로 '확인 결과 남기기' → 사례로 저장(학습 탭과 같은 경로). 비정상은 원인·판단 근거가 있어야 저장된다."""
+    from app.learning.log_entry import LogEntryService
+
+    page = LogAnalysisPage(ctx)
+    qtbot.addWidget(page)
+    ids = load(ctx, [abnormal_log(tmp_path / "bad.log", start_second=80)], OriginPurpose.ANALYSIS)
+    page.import_panel.set_log_file_ids(ids)
+    page.use_ai.setChecked(False)
+    assert page.confirm_box.isHidden()  # 결과 전에는 숨김
+    with qtbot.waitSignal(page.analysis_done, timeout=15_000):
+        page.start_analysis()
+    box = page.confirm_box
+    assert not box.isHidden() and box.log_file_id == ids[0] and "사례 판단" in box.memory.text()
+    box.abnormal.setChecked(True)
+    assert not box.save_button.isEnabled()  # 비정상인데 원인 글이 없음
+    box.text.setText("TEST-SUB 재시도 뒤 같은 코드 반복(가상)")
+    assert box.save_button.isEnabled()
+    with qtbot.waitSignal(box.saved, timeout=5_000):
+        box.save_button.click()
+    entry = LogEntryService(ctx.database).entry(ids[0])
+    assert entry.label == "ABNORMAL" and entry.saved and entry.criteria == "TEST-SUB 재시도 뒤 같은 코드 반복(가상)"
+    assert "사례로 저장했습니다" in box.status.text()
+    box.set_log(ids[0])  # 다시 보면 저장한 판정·글이 채워져 있다
+    assert box.abnormal.isChecked() and box.text.text().startswith("TEST-SUB") and "이미 '비정상'" in box.status.text()
+
+
+def test_confirm_keeps_memo_and_saves_same_session_as_one_case(qtbot, ctx, knowledge, tmp_path: Path) -> None:  # noqa: F811  리뷰 2026-11-22
+    """비정상으로 다시 저장해도 운전 조건 메모를 지키고, 같은 수집 세션으로 묶어 분석한 로그는 사례 하나로 저장된다.
+    묶음 분석에도 사례 판단이 붙는다."""
+    from app.learning.log_entry import LogEntryService
+    from app.models.records import SessionMode
+
+    service = LogEntryService(ctx.database)
+    single = load(ctx, [abnormal_log(tmp_path / "one.log", start_second=100)], OriginPurpose.ANALYSIS)
+    service.save(single[0], "ABNORMAL", "운전 조건: 가상 고속", "가상 판단 근거 1")
+    page = LogAnalysisPage(ctx)
+    qtbot.addWidget(page)
+    page.confirm_box.set_log(single)
+    assert page.confirm_box.abnormal.isChecked() and page.confirm_box.text.text() == "가상 판단 근거 1"
+    page.confirm_box.text.setText("가상 판단 근거 2")
+    page.confirm_box.save()
+    entry = service.entry(single[0])
+    assert entry.criteria == "가상 판단 근거 2" and entry.memo == "운전 조건: 가상 고속"  # 메모가 지워지지 않음
+
+    ids = load(ctx, [abnormal_log(tmp_path / "g1.log", start_second=110), abnormal_log(tmp_path / "g2.log", start_second=120)],
+               OriginPurpose.ANALYSIS, SessionMode.SAME)
+    page.import_panel.set_log_file_ids(ids)
+    page.use_ai.setChecked(False)
+    with qtbot.waitSignal(page.analysis_done, timeout=15_000):
+        page.start_analysis()
+    assert page.result.memory is not None and "사례 판단" in page.confirm_box.memory.text()  # 묶음에도 사례 기억
+    box = page.confirm_box
+    assert box.log_ids == sorted(ids) and "묶음 2개" in box.save_button.text()
+    box.abnormal.setChecked(True)
+    box.text.setText("묶음 가상 판단 근거")
+    with qtbot.waitSignal(box.saved, timeout=5_000):
+        box.save_button.click()
+    case = service.group_case(ids)
+    assert case is not None and case.case_type == "ABNORMAL" and case.status == "APPROVED"
+    assert service.group_entry(ids).criteria == "묶음 가상 판단 근거"

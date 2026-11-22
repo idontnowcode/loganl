@@ -11,13 +11,15 @@
   레시피 단계 순서 뒤바뀜, 인터록 뒤 중단, 챔버 하나가 알림 없이 빠짐, 스케줄러 멈춤, 로그 끊김.
 - 파일 이름으로 정상/비정상을 알 수 없다. 답은 정답표.txt(파일 · 구분 · 동작 메모 · 판단 가이드).
 
-실행: uv run python samples/make_cluster_tool_samples.py [--seed 20261123] [--out samples/다중챔버_가상세트]
+실행: uv run python samples/make_cluster_tool_samples.py [--seed 20261123] [--out samples/다중챔버_가상세트] [--total 100]
+시험용(학습 뒤 처음 보는 로그): --seed 20261124 --total 50 --out samples/다중챔버_시험세트
 """
 
 from __future__ import annotations
 
 import argparse
 import random
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -303,7 +305,8 @@ def heartbeat(tool: Tool, until: float) -> None:
         t += 30
 
 
-def make_log(rnd: random.Random, number: int, kind: str | None, where: str, variant: str) -> tuple[list[str], str, str]:
+def make_log(rnd: random.Random, number: int, kind: str | None, where: str, variant: str,
+             ambiguous: bool = False) -> tuple[list[str], str, str]:
     t0 = datetime(2026, 11, 1) + timedelta(days=rnd.randint(0, 19), hours=rnd.randint(6, 20), minutes=rnd.randint(0, 59))
     tool = Tool(rnd, t0, Fault(kind, where, variant) if kind else None)
     if kind in ("robot_e710", "rf_e730", "interlock", "step_swap", "pump_e720"):
@@ -357,13 +360,21 @@ def make_log(rnd: random.Random, number: int, kind: str | None, where: str, vari
         at += 1
         result = "ABORTED"
     heartbeat(tool, at)
+    if kind == "notice_fk":  # 애매한 세트: 줄 모양은 같고 코드만 다른 INFO 알림(뜻은 엔지니어 판정으로만 앎)
+        tool.add(rnd.uniform(60, max(61, at - 10)), "INFO", "TEST-SYS", "T-SYS", "NOTICE flag=TEST-FK unit=2")
+        tool.fault.fired = True
+        tool.memo.append("INFO 알림 'NOTICE flag=TEST-FK'가 나옴(오류·경고 아님). 가상 판정: 엔지니어가 점검 필요로 본 알림")
+    elif ambiguous and kind is None and rnd.random() < 0.12:
+        tool.add(rnd.uniform(60, max(61, at - 10)), "INFO", "TEST-SYS", "T-SYS", "NOTICE flag=TEST-FA unit=1")
+        tool.memo.append("INFO 알림 'NOTICE flag=TEST-FA'가 나옴(가상 판정: 문제없는 알림, 정비 아님)")
     if result != "TRUNC":
         tool.add(at + 3, "INFO", "TEST-SYS", "T-SYS", f"SESSION_END session=TEST-SS-{number:04d} result={result}")
     if kind and not tool.fault.fired:
         raise RuntimeError(f"고장이 안 들어감: {kind} {where}")
     memo = f"기판 처리 {lots}로트({', '.join(recipes) or '-'}), 챔버 {''.join(c for c in CHAMBERS if c not in (tool.disabled, tool.silent))}"
     memo += (", " + "; ".join(m for m in tool.memo if '정비' in m)) if any('정비' in m for m in tool.memo) else ""
-    guide = "; ".join(m for m in tool.memo if "정비" not in m) if kind else ""
+    memo += "".join(f", {m}" for m in tool.memo if "TEST-FA" in m)
+    guide = "; ".join(m for m in tool.memo if "정비" not in m and "TEST-FA" not in m) if kind else ""
     if kind in ("temp_drift", "gas_stuck") and not guide:
         guide = {"temp_drift": f"오류 코드 없음. 챔버 {where}의 가열 단계 온도(temp)가 기판마다 조금씩 올라 뒤쪽 기판은 설정보다 크게 높음.",
                  "gas_stuck": f"오류 코드 없음. 챔버 {where}의 처리 단계 가스 값(gas)이 소수점까지 똑같이 멈춰 있음."}[kind]
@@ -382,16 +393,40 @@ ABNORMAL = (
 NORMALS = 63
 
 
-def build(seed: str, out: Path) -> list[tuple[str, str, str, str]]:
+def pick_abnormal(count: int, pool: Sequence[tuple[str, str, str]] = ABNORMAL) -> list[tuple[str, str, str]]:
+    """비정상 count개: 고장 종류마다 돌아가며 하나씩(종류가 고루 들어가게). count가 전체 목록 이상이면 전체."""
+    if count >= len(pool):
+        return list(pool)
+    by_kind: dict[str, list[tuple[str, str, str]]] = {}
+    for job in pool:
+        by_kind.setdefault(job[0], []).append(job)
+    out: list[tuple[str, str, str]] = []
+    while len(out) < count:
+        for jobs in by_kind.values():
+            if jobs and len(out) < count:
+                out.append(jobs.pop(0))
+    return out
+
+
+AMBIGUOUS = list(ABNORMAL) + [("notice_fk", "", "")] * 7  # 애매한 세트: 오류 아닌 INFO 알림 하나만 다른 비정상
+
+
+def build(seed: str, out: Path, total: int = 100, ambiguous: bool = False) -> list[tuple[str, str, str, str]]:
+    """total개: 정상·비정상 비율은 100개 세트와 같게(63:37). 시험용 세트는 다른 씨앗·total=50으로 만든다.
+    ambiguous: 정상의 약 12%에 문제없는 알림(TEST-FA), 비정상에 점검 필요 알림(TEST-FK)만 다른 로그를 섞는다."""
     rnd = random.Random(seed)
-    jobs: list[tuple[str | None, str, str]] = [(None, "", "")] * NORMALS + list(ABNORMAL)
+    normals = round(total * NORMALS / (NORMALS + len(ABNORMAL)))
+    pool = AMBIGUOUS if ambiguous else ABNORMAL
+    if ambiguous:  # 알림 비정상이 시험용(50개)에도 고루 들어가게 앞쪽에 둔다
+        pool = [job for job in pool if job[0] == "notice_fk"][:max(2, (total - normals) // 5)] + [j for j in ABNORMAL]
+    jobs: list[tuple[str | None, str, str]] = [(None, "", "")] * normals + pick_abnormal(total - normals, pool)
     rnd.shuffle(jobs)
     out.mkdir(parents=True, exist_ok=True)
     for old in out.glob("MC_*.log"):
         old.unlink()
     rows = []
     for index, (kind, where, variant) in enumerate(jobs, start=1):
-        lines, memo, guide = make_log(rnd, index, kind, where, variant)
+        lines, memo, guide = make_log(rnd, index, kind, where, variant, ambiguous)
         name = f"MC_{index:03d}.log"
         (out / name).write_text("\n".join(lines) + "\n", encoding="utf-8")
         rows.append((name, "비정상" if kind else "정상", memo, guide))
@@ -404,8 +439,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--seed", default=SEED)
     parser.add_argument("--out", type=Path, default=OUT)
+    parser.add_argument("--total", type=int, default=100, help="로그 수(시험용 세트는 50)")
+    parser.add_argument("--ambiguous", action="store_true", help="오류 아닌 INFO 알림으로만 갈리는 애매한 로그를 섞는다(CR-14 시험)")
     args = parser.parse_args()
-    rows = build(args.seed, args.out)
+    rows = build(args.seed, args.out, args.total, args.ambiguous)
     abnormal = sum(r[1] == "비정상" for r in rows)
     print(f"{args.out}: 로그 {len(rows)}개 (정상 {len(rows) - abnormal}, 비정상 {abnormal})")
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import re
 from contextlib import closing
+from pathlib import Path
 from typing import Any
 
 from app import APP_NAME, __version__
@@ -33,7 +34,7 @@ NOTICE = ("이 보고서는 로컬에서 만든 분석 결과다. 유사도 점�
           "권장 대응은 승인된 대응 매뉴얼·진단 가이드 항목에서만 가져왔다.")
 
 
-def load_report(database: Database, run_id: int) -> dict[str, Any]:
+def load_report(database: Database, run_id: int, analysis_dir: Path | None = None) -> dict[str, Any]:
     with closing(database.connect()) as conn:
         analysis = AnalysisRepository(conn)
         run = analysis.get(run_id)
@@ -97,7 +98,9 @@ def load_report(database: Database, run_id: int) -> dict[str, Any]:
         attach_context(database, picked)  # CR-13 SQ-01
         errors = [m.as_dict() for m in picked]
 
+    verdict = _verdict(analysis_dir, run_id, run)
     return {
+        "verdict": verdict,
         "app": f"{APP_NAME} {__version__}",
         "plan": "LLA-DEV-PLAN-001 v0.2 R01 + CR-01·04·06",
         "generated_at": utc_now_iso(),
@@ -126,13 +129,28 @@ def load_report(database: Database, run_id: int) -> dict[str, Any]:
     }
 
 
+def _verdict(analysis_dir: Path | None, run_id: int, run) -> dict[str, Any]:
+    """분석 때 남긴 최종 판정(analysis/R-xxxx/verdict.json). 없으면(예전 분석·폴더 모름) 저장된 이상 수준만으로."""
+    import json
+
+    from app.analysis.verdict import final_verdict
+
+    try:
+        if analysis_dir is None:
+            raise OSError
+        return json.loads((analysis_dir / f"R-{run_id:04d}" / "verdict.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        fallback = final_verdict({"anomaly_level": run["anomaly_level"], "normal_match": run["normal_match"]})
+        return {"state": fallback.state, "title": fallback.title, "reasons": fallback.reasons, "memory": None, "ai": None}
+
+
 def save_reports(database: Database, paths, run_id: int) -> tuple[str, str]:
     """`analysis/R-xxxx/report.json`·`report.html`을 쓰고 분석 실행에 경로를 기록한다(data_root 기준 상대 경로)."""
     from app.reports.html_exporter import write_html
     from app.reports.json_exporter import write_json
     from app.storage.database import transaction
 
-    data = load_report(database, run_id)
+    data = load_report(database, run_id, paths.analysis)
     folder = paths.analysis / f"R-{run_id:04d}"
     json_path = write_json(data, folder / "report.json")
     html_path = write_html(data, folder / "report.html")
@@ -165,6 +183,11 @@ def report_text(data: dict[str, Any]) -> str:
     """화면의 '결과 다시 보기'용 짧은 글."""
     lines = [f"{data['run']['label']} · {data['run']['status']} · 시작 {data['run']['started_at']}"]
     lines.append("파일: " + ", ".join(f["name"] for f in data["files"]))
+    lines.append("")
+    verdict = data.get("verdict") or {}
+    lines.append(f"[최종 판정 — {verdict.get('title', '-')}]")
+    lines += [f"  · {reason}" for reason in verdict.get("reasons", [])]
+    lines += [f"  · {verdict[k]}" for k in ("memory", "ai") if verdict.get(k)]
     lines.append("")
     lines.append(f"[권장 대응 — {data['axes']['response_guidance']['text']}]")
     lines += [f"  [{i['label']}] {i['text']}  (출처 {i['case']} · {i['source'] or '-'})" for i in data["guidance"]["items"]]

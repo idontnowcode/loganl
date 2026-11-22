@@ -28,6 +28,7 @@
 - 2026-11-22: CT 유사 가상 샘플 100개(`samples/make_ct_like_samples.py`, 같은 베드 오류가 시퀀스 다섯 위치에서), 그 세트에서 드러난 번호별 흐름 오탐 고침(DT-17, 오탐 11% → 0%, 기존 세트 회귀 그대로). UI 개편용 설명서 `docs/UI_BRIEF.md`(+ `docs/ui_brief_shots/`). 테스트 726 통과.
 - 2026-11-22 2차: **CR-12 단계별 화면**(왼쪽 메뉴 + 작업마다 ①②③, `ui/navigation.py`, 설계 `docs/CR12_단계별_화면_설계.md`). 테스트 731 통과. 11/22 작업(CT 샘플·DT-17·CR-12)을 **v0.5.0**으로 릴리스(갱신 zip = exe + `_internal`).
 - 2026-11-22 3차: **CR-13 개선 묶음** — 예상 에러에 직전 단계·앞 3줄, 같은 코드라도 같은 단계 사례를 먼저(SQ-01·02), 정상에 없던 경고·통째로 빠진 구성요소·짧은 로그 메모(DT-18~20), 실제 크기(정상 1~2만 줄) 분석 속도(PF-01), 폴더째 넣기·구분 미리 정하기(LI-14), 화면 손질(UI-21), `packaging/make_update_zip.py`(RL-01). 테스트 741 통과. **v0.6.0**으로 릴리스(갱신 zip = exe + `_internal`).
+- 2026-11-22 4차: 다중 챔버 가상 세트(`samples/make_cluster_tool_samples.py`, 처리 단위 3개 동시 진행)로 약점 보강(SQ-03·DT-21~25, 74%→92%). 사용자 방향 "앱 판단을 로그에 맞게 고치지 말고, **앱 업데이트 없이 확인된 로그가 쌓일수록 정확해지는 구조**" → **CR-14 사례 기억**(`app/learning/case_memory.py`, 설계 `docs/CR14_사례_기억_설계.md`): 근거 지문(데이터 폴더 캐시)·지문이 비슷한 확인 로그 투표로 판정 보정(확인 로그끼리 하나씩 빼고 판단해 스스로 문턱, 규칙만보다 나을 때만)·AI 근거 맨 앞·AI 판정 문턱을 확인 이력으로(CM-07)·② '확인 결과 남기기'. 리뷰 반영(CM-08~11): 권장 대응은 비정상 + 적용 근거 있는 사례만·AI 조치는 승인 원문만, 최종 판정 하나(정상/비정상/판단 보류, `app/analysis/verdict.py`), AI 점수·메모 보존, 같은 수집 세션 묶음도 사례 기억·사례 하나로 저장. 파서 `ymd_bracket_level` 레벨 칸 수정(PA-12). **시험 방법(사용자 지정): 학습용 100개·시험용 50개를 따로 만들고, 학습 뒤 시험용을 하나씩 분석·확인하며 정답률 변화를 본다** (`samples/split_train_test.py`, `samples/evaluate_learning.py`, 애매한 세트 `--ambiguous`). 결과는 `docs/TEST_PLAN.md`. **AI(LLM)는 판정에 넣지 않고 설명 보조로만**(사용자 결정, 판정은 규칙 + 사례 기억). **v0.7.0** 빌드(스키마 7 그대로, 릴리스·push는 아직).
 - 변경 요청 CR-01(대응 매뉴얼·권장 대응), CR-02(디자인), CR-03(무설치), CR-04(참고 자료), CR-05(자연어 입력), CR-06(로그 입력 탭), CR-07(LLM 질문·확률 의견) 반영. 미결 질문 Q1~Q5는 기본값으로 진행(REQUIREMENTS §3).
 - 남은 일: 사내 PC 오프라인 확인·7~8B 모델 평가·실제 로그 샘플로 파서 프로파일 추가(docs/INSTALL.md §1).
 
@@ -35,7 +36,7 @@
 
 - 설치 `uv sync`, 화면 `uv run python main.py`, 점검 `uv run python main.py --check`, 테스트 `uv run pytest`, 실행 파일 `packaging\build.ps1`(AI 동봉 `-OllamaModel gemma3:4b`)
 - 실제 Ollama 시험 `LLA_LIVE_OLLAMA=1`, 성능 시험 `LLA_PERF=1`(약 1분, 가져오기 T-PERF-01·분석 T-PERF-02). 기본 테스트에서는 꺼져 있다.
-- 릴리스: 빌드 전 dist 앱을 CloseMainWindow로 닫기 → `packaginguild.ps1 -OllamaModel gemma3:4b` → `uv run python packaging/make_update_zip.py dist <안내.txt> LocalLogAnalyzer-app-update-v<버전>.zip` → zip 풀어 `--check`(LLA_HOME 스크래치) → 푸시 → `gh release create v<버전>-<YYYYMMDD> <zip> --target <전체 SHA>`(짧은 SHA는 422) → 탐색기로 앱 다시 띄우기.
+- 릴리스: 빌드 전 dist 앱을 CloseMainWindow로 닫기 → `packaging\build.ps1 -OllamaModel gemma3:4b` → `uv run python packaging/make_update_zip.py dist <안내.txt> LocalLogAnalyzer-app-update-v<버전>.zip` → zip 풀어 `--check`(LLA_HOME 스크래치) → 푸시 → `gh release create v<버전>-<YYYYMMDD> <zip> --target <전체 SHA>`(짧은 SHA는 422) → 탐색기로 앱 다시 띄우기.
 - Python 3.11은 uv가 받는다. **Claude 데스크톱 앱 안에서 uv를 돌릴 때는 `UV_PYTHON_INSTALL_DIR=C:/Users/admin/.uv/python`을 준다.** 앱 안에서 `%APPDATA%`에 설치하면 가상화돼 사용자 터미널에서 `.venv`가 깨진다(지금 `.venv`는 이 경로의 Python을 가리킨다).
 - 같은 이유로 Claude 앱 안에서 앱을 직접 실행해 볼 때는 `LLA_HOME`을 스크래치 폴더로 준다. 그러지 않으면 `%LOCALAPPDATA%`에 쓴 데이터가 가상화돼 사용자에게 안 보인다.
 

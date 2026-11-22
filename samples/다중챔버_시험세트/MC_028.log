@@ -1,0 +1,935 @@
+2026-11-02 07:52:00.000 | INFO  | TEST-SYS     | T-SYS | NOTE 가상 테스트 로그, 실제 장비 형식과 의미 아님
+2026-11-02 07:52:00.100 | INFO  | TEST-SYS     | T-SYS | SESSION_START tool=TEST-TOOL-01 session=TEST-SS-0028
+2026-11-02 07:52:01.413 | INFO  | TEST-ROBOT   | T-SYS | SELFCHECK result=OK
+2026-11-02 07:52:02.011 | INFO  | TEST-ALIGNER | T-SYS | SELFCHECK result=OK
+2026-11-02 07:52:02.308 | INFO  | TEST-VAC     | T-SYS | SELFCHECK result=OK
+2026-11-02 07:52:02.805 | INFO  | TEST-COOLANT | T-SYS | SELFCHECK result=OK
+2026-11-02 07:52:03.269 | INFO  | TEST-CHA     | T-SYS | SELFCHECK result=OK
+2026-11-02 07:52:03.716 | INFO  | TEST-CHB     | T-SYS | SELFCHECK result=OK
+2026-11-02 07:52:04.298 | INFO  | TEST-CHC     | T-SYS | SELFCHECK result=OK
+2026-11-02 07:52:05.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.089 pump_rpm=6051
+2026-11-02 07:52:05.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=9.7 temp_c=20.8
+2026-11-02 07:52:06.298 | INFO  | TEST-SCHED   | T-SCHED | LOT_START lot=TEST-LOT-001 count=11 recipe=TEST-RCP-2 port=LP1
+2026-11-02 07:52:06.298 | INFO  | TEST-SCHED   | T-SCHED | DISPATCH sub=W0101 chamber=A
+2026-11-02 07:52:06.498 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-LP1 dst=TEST-ALIGNER sub=W0101
+2026-11-02 07:52:08.784 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-LP1 sub=W0101 vacuum=OK
+2026-11-02 07:52:13.569 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-ALIGNER sub=W0101
+2026-11-02 07:52:14.963 | INFO  | TEST-ALIGNER | T-ALIGN | ALIGN_START sub=W0101
+2026-11-02 07:52:21.098 | INFO  | TEST-ALIGNER | T-ALIGN | ALIGN_DONE sub=W0101 offset_deg=-0.20
+2026-11-02 07:52:21.398 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-ALIGNER dst=TEST-CHA sub=W0101
+2026-11-02 07:52:24.313 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-ALIGNER sub=W0101 vacuum=OK
+2026-11-02 07:52:29.288 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-CHA sub=W0101
+2026-11-02 07:52:30.648 | INFO  | TEST-CHA     | T-CHA | DOOR state=CLOSED sub=W0101
+2026-11-02 07:52:31.285 | INFO  | TEST-CHA     | T-CHA | RECIPE_START recipe=TEST-RCP-2 sub=W0101
+2026-11-02 07:52:31.285 | INFO  | TEST-CHA     | T-CHA | STEP_START step=PUMP sub=W0101 pressure_set=0.05
+2026-11-02 07:52:32.550 | INFO  | TEST-SCHED   | T-SCHED | DISPATCH sub=W0102 chamber=B
+2026-11-02 07:52:32.750 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-LP1 dst=TEST-ALIGNER sub=W0102
+2026-11-02 07:52:34.285 | INFO  | TEST-CHA     | T-CHA | TEL pressure=190.000 temp=25.4 sub=W0101
+2026-11-02 07:52:35.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.083 pump_rpm=5959
+2026-11-02 07:52:35.063 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-LP1 sub=W0102 vacuum=OK
+2026-11-02 07:52:35.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=9.6 temp_c=18.0
+2026-11-02 07:52:37.285 | INFO  | TEST-CHA     | T-CHA | TEL pressure=47.500 temp=26.1 sub=W0101
+2026-11-02 07:52:40.285 | INFO  | TEST-CHA     | T-CHA | TEL pressure=11.875 temp=25.4 sub=W0101
+2026-11-02 07:52:40.965 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-ALIGNER sub=W0102
+2026-11-02 07:52:41.681 | INFO  | TEST-ALIGNER | T-ALIGN | ALIGN_START sub=W0102
+2026-11-02 07:52:43.285 | INFO  | TEST-CHA     | T-CHA | TEL pressure=2.969 temp=24.8 sub=W0101
+2026-11-02 07:52:46.285 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.742 temp=26.9 sub=W0101
+2026-11-02 07:52:47.628 | INFO  | TEST-ALIGNER | T-ALIGN | ALIGN_DONE sub=W0102 offset_deg=0.04
+2026-11-02 07:52:47.928 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-ALIGNER dst=TEST-CHB sub=W0102
+2026-11-02 07:52:49.285 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.186 temp=27.1 sub=W0101
+2026-11-02 07:52:49.285 | INFO  | TEST-CHA     | T-CHA | STEP_END step=PUMP sub=W0101
+2026-11-02 07:52:49.990 | INFO  | TEST-CHA     | T-CHA | STEP_START step=PROCESS sub=W0101 rf_set=250 gas_set=40
+2026-11-02 07:52:50.884 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-ALIGNER sub=W0102 vacuum=OK
+2026-11-02 07:52:52.990 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.048 temp=24.7 rf_fwd=250 rf_ref=5.7 gas=39.5 sub=W0101
+2026-11-02 07:52:55.900 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-CHB sub=W0102
+2026-11-02 07:52:55.990 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.049 temp=25.3 rf_fwd=247 rf_ref=2.4 gas=40.7 sub=W0101
+2026-11-02 07:52:56.933 | INFO  | TEST-CHB     | T-CHB | DOOR state=CLOSED sub=W0102
+2026-11-02 07:52:58.092 | INFO  | TEST-CHB     | T-CHB | RECIPE_START recipe=TEST-RCP-2 sub=W0102
+2026-11-02 07:52:58.092 | INFO  | TEST-CHB     | T-CHB | STEP_START step=PUMP sub=W0102 pressure_set=0.05
+2026-11-02 07:52:58.990 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.055 temp=28.0 rf_fwd=250 rf_ref=2.9 gas=40.4 sub=W0101
+2026-11-02 07:52:59.596 | INFO  | TEST-SCHED   | T-SCHED | DISPATCH sub=W0103 chamber=C
+2026-11-02 07:52:59.796 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-LP1 dst=TEST-ALIGNER sub=W0103
+2026-11-02 07:53:01.092 | INFO  | TEST-CHB     | T-CHB | TEL pressure=190.000 temp=27.0 sub=W0102
+2026-11-02 07:53:01.990 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.055 temp=24.9 rf_fwd=248 rf_ref=4.4 gas=40.0 sub=W0101
+2026-11-02 07:53:03.461 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-LP1 sub=W0103 vacuum=OK
+2026-11-02 07:53:04.092 | INFO  | TEST-CHB     | T-CHB | TEL pressure=47.500 temp=27.1 sub=W0102
+2026-11-02 07:53:04.990 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.046 temp=26.2 rf_fwd=251 rf_ref=4.8 gas=40.8 sub=W0101
+2026-11-02 07:53:05.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.111 pump_rpm=6077
+2026-11-02 07:53:05.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=10.2 temp_c=19.8
+2026-11-02 07:53:06.548 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-ALIGNER sub=W0103
+2026-11-02 07:53:07.092 | INFO  | TEST-CHB     | T-CHB | TEL pressure=11.875 temp=26.0 sub=W0102
+2026-11-02 07:53:07.886 | INFO  | TEST-ALIGNER | T-ALIGN | ALIGN_START sub=W0103
+2026-11-02 07:53:07.990 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.046 temp=27.3 rf_fwd=252 rf_ref=4.7 gas=40.5 sub=W0101
+2026-11-02 07:53:10.092 | INFO  | TEST-CHB     | T-CHB | TEL pressure=2.969 temp=24.8 sub=W0102
+2026-11-02 07:53:10.990 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.055 temp=24.7 rf_fwd=247 rf_ref=2.6 gas=39.7 sub=W0101
+2026-11-02 07:53:13.092 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.742 temp=28.0 sub=W0102
+2026-11-02 07:53:13.990 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.051 temp=26.8 rf_fwd=251 rf_ref=5.6 gas=40.8 sub=W0101
+2026-11-02 07:53:14.275 | INFO  | TEST-ALIGNER | T-ALIGN | ALIGN_DONE sub=W0103 offset_deg=-0.12
+2026-11-02 07:53:14.575 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-ALIGNER dst=TEST-CHC sub=W0103
+2026-11-02 07:53:16.092 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.186 temp=24.1 sub=W0102
+2026-11-02 07:53:16.990 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.052 temp=24.2 rf_fwd=251 rf_ref=5.0 gas=40.9 sub=W0101
+2026-11-02 07:53:17.687 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-ALIGNER sub=W0103 vacuum=OK
+2026-11-02 07:53:19.092 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=25.8 sub=W0102
+2026-11-02 07:53:19.092 | INFO  | TEST-CHB     | T-CHB | STEP_END step=PUMP sub=W0102
+2026-11-02 07:53:19.617 | INFO  | TEST-CHB     | T-CHB | STEP_START step=PROCESS sub=W0102 rf_set=250 gas_set=40
+2026-11-02 07:53:19.990 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.051 temp=27.2 rf_fwd=251 rf_ref=5.3 gas=39.4 sub=W0101
+2026-11-02 07:53:22.320 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-CHC sub=W0103
+2026-11-02 07:53:22.617 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.051 temp=25.2 rf_fwd=249 rf_ref=2.9 gas=39.3 sub=W0102
+2026-11-02 07:53:22.990 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.050 temp=25.4 rf_fwd=252 rf_ref=4.9 gas=40.7 sub=W0101
+2026-11-02 07:53:23.079 | INFO  | TEST-CHC     | T-CHC | DOOR state=CLOSED sub=W0103
+2026-11-02 07:53:24.163 | INFO  | TEST-CHC     | T-CHC | RECIPE_START recipe=TEST-RCP-2 sub=W0103
+2026-11-02 07:53:24.163 | INFO  | TEST-CHC     | T-CHC | STEP_START step=PUMP sub=W0103 pressure_set=0.05
+2026-11-02 07:53:25.617 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.053 temp=26.0 rf_fwd=250 rf_ref=4.0 gas=41.2 sub=W0102
+2026-11-02 07:53:25.990 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.052 temp=24.5 rf_fwd=252 rf_ref=2.7 gas=40.9 sub=W0101
+2026-11-02 07:53:27.163 | INFO  | TEST-CHC     | T-CHC | TEL pressure=190.000 temp=25.4 sub=W0103
+2026-11-02 07:53:28.617 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=24.2 rf_fwd=252 rf_ref=3.2 gas=40.5 sub=W0102
+2026-11-02 07:53:28.990 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.051 temp=24.3 rf_fwd=248 rf_ref=2.1 gas=39.3 sub=W0101
+2026-11-02 07:53:30.163 | INFO  | TEST-CHC     | T-CHC | TEL pressure=47.500 temp=24.6 sub=W0103
+2026-11-02 07:53:31.617 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.048 temp=27.6 rf_fwd=253 rf_ref=6.0 gas=39.0 sub=W0102
+2026-11-02 07:53:31.990 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.050 temp=25.5 rf_fwd=250 rf_ref=2.7 gas=40.5 sub=W0101
+2026-11-02 07:53:33.163 | INFO  | TEST-CHC     | T-CHC | TEL pressure=11.875 temp=26.7 sub=W0103
+2026-11-02 07:53:34.617 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.053 temp=27.7 rf_fwd=253 rf_ref=2.9 gas=40.3 sub=W0102
+2026-11-02 07:53:34.990 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.054 temp=27.2 rf_fwd=248 rf_ref=5.1 gas=39.8 sub=W0101
+2026-11-02 07:53:34.990 | INFO  | TEST-CHA     | T-CHA | STEP_END step=PROCESS sub=W0101
+2026-11-02 07:53:35.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.091 pump_rpm=6071
+2026-11-02 07:53:35.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=10.3 temp_c=18.8
+2026-11-02 07:53:35.862 | INFO  | TEST-CHA     | T-CHA | STEP_START step=PROCESS2 sub=W0101 rf_set=450 gas_set=80
+2026-11-02 07:53:36.163 | INFO  | TEST-CHC     | T-CHC | TEL pressure=2.969 temp=25.8 sub=W0103
+2026-11-02 07:53:37.617 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=27.8 rf_fwd=253 rf_ref=4.8 gas=39.7 sub=W0102
+2026-11-02 07:53:38.862 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.046 temp=24.6 rf_fwd=451 rf_ref=5.0 gas=79.9 sub=W0101
+2026-11-02 07:53:39.163 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.742 temp=24.9 sub=W0103
+2026-11-02 07:53:40.617 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.050 temp=27.4 rf_fwd=253 rf_ref=4.0 gas=40.0 sub=W0102
+2026-11-02 07:53:41.862 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.050 temp=24.1 rf_fwd=448 rf_ref=3.2 gas=79.4 sub=W0101
+2026-11-02 07:53:42.163 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.186 temp=25.6 sub=W0103
+2026-11-02 07:53:43.617 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.048 temp=27.1 rf_fwd=252 rf_ref=6.0 gas=39.2 sub=W0102
+2026-11-02 07:53:44.862 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.048 temp=27.9 rf_fwd=452 rf_ref=3.3 gas=80.5 sub=W0101
+2026-11-02 07:53:45.163 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.046 temp=25.5 sub=W0103
+2026-11-02 07:53:45.163 | INFO  | TEST-CHC     | T-CHC | STEP_END step=PUMP sub=W0103
+2026-11-02 07:53:45.641 | INFO  | TEST-CHC     | T-CHC | STEP_START step=PROCESS sub=W0103 rf_set=250 gas_set=40
+2026-11-02 07:53:46.617 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.054 temp=28.0 rf_fwd=249 rf_ref=5.5 gas=40.2 sub=W0102
+2026-11-02 07:53:47.862 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.049 temp=25.2 rf_fwd=447 rf_ref=4.3 gas=79.1 sub=W0101
+2026-11-02 07:53:48.641 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.047 temp=24.6 rf_fwd=251 rf_ref=2.2 gas=40.9 sub=W0103
+2026-11-02 07:53:49.617 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=24.4 rf_fwd=253 rf_ref=5.6 gas=39.4 sub=W0102
+2026-11-02 07:53:50.862 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.046 temp=24.4 rf_fwd=450 rf_ref=4.3 gas=79.7 sub=W0101
+2026-11-02 07:53:51.641 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.051 temp=25.7 rf_fwd=251 rf_ref=5.2 gas=40.0 sub=W0103
+2026-11-02 07:53:52.617 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.045 temp=26.6 rf_fwd=248 rf_ref=4.9 gas=40.6 sub=W0102
+2026-11-02 07:53:53.862 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.046 temp=26.2 rf_fwd=452 rf_ref=5.1 gas=81.2 sub=W0101
+2026-11-02 07:53:54.641 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.050 temp=27.0 rf_fwd=250 rf_ref=6.0 gas=40.1 sub=W0103
+2026-11-02 07:53:55.617 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.050 temp=25.5 rf_fwd=250 rf_ref=2.6 gas=39.1 sub=W0102
+2026-11-02 07:53:56.862 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.046 temp=27.9 rf_fwd=453 rf_ref=5.7 gas=79.9 sub=W0101
+2026-11-02 07:53:57.641 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.053 temp=25.6 rf_fwd=252 rf_ref=4.7 gas=40.4 sub=W0103
+2026-11-02 07:53:58.617 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.052 temp=27.1 rf_fwd=250 rf_ref=5.1 gas=40.8 sub=W0102
+2026-11-02 07:53:59.862 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.052 temp=24.2 rf_fwd=452 rf_ref=4.1 gas=79.7 sub=W0101
+2026-11-02 07:54:00.641 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.046 temp=26.9 rf_fwd=250 rf_ref=5.1 gas=38.8 sub=W0103
+2026-11-02 07:54:01.617 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.052 temp=27.6 rf_fwd=247 rf_ref=5.5 gas=40.5 sub=W0102
+2026-11-02 07:54:02.862 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.050 temp=27.4 rf_fwd=450 rf_ref=3.9 gas=80.3 sub=W0101
+2026-11-02 07:54:03.641 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.049 temp=24.4 rf_fwd=252 rf_ref=5.5 gas=40.0 sub=W0103
+2026-11-02 07:54:04.617 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.048 temp=25.5 rf_fwd=248 rf_ref=4.0 gas=38.8 sub=W0102
+2026-11-02 07:54:05.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.113 pump_rpm=5940
+2026-11-02 07:54:05.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=10.3 temp_c=19.1
+2026-11-02 07:54:05.862 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.051 temp=25.3 rf_fwd=449 rf_ref=2.8 gas=79.6 sub=W0101
+2026-11-02 07:54:06.641 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.046 temp=24.5 rf_fwd=249 rf_ref=5.6 gas=41.1 sub=W0103
+2026-11-02 07:54:07.617 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.053 temp=27.4 rf_fwd=251 rf_ref=4.9 gas=41.0 sub=W0102
+2026-11-02 07:54:08.862 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.052 temp=26.0 rf_fwd=447 rf_ref=5.2 gas=79.7 sub=W0101
+2026-11-02 07:54:09.641 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.045 temp=24.9 rf_fwd=249 rf_ref=4.9 gas=40.8 sub=W0103
+2026-11-02 07:54:10.617 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.054 temp=27.6 rf_fwd=250 rf_ref=2.5 gas=39.4 sub=W0102
+2026-11-02 07:54:11.862 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.047 temp=27.9 rf_fwd=451 rf_ref=3.7 gas=79.2 sub=W0101
+2026-11-02 07:54:12.641 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.046 temp=27.3 rf_fwd=251 rf_ref=3.3 gas=41.0 sub=W0103
+2026-11-02 07:54:13.617 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.052 temp=26.5 rf_fwd=252 rf_ref=2.7 gas=40.4 sub=W0102
+2026-11-02 07:54:14.862 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.054 temp=27.1 rf_fwd=449 rf_ref=2.2 gas=79.3 sub=W0101
+2026-11-02 07:54:15.641 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.045 temp=25.6 rf_fwd=247 rf_ref=3.3 gas=40.7 sub=W0103
+2026-11-02 07:54:16.617 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=26.9 rf_fwd=252 rf_ref=2.1 gas=40.0 sub=W0102
+2026-11-02 07:54:17.862 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.049 temp=27.7 rf_fwd=453 rf_ref=3.0 gas=80.5 sub=W0101
+2026-11-02 07:54:18.641 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.047 temp=25.3 rf_fwd=251 rf_ref=2.9 gas=41.1 sub=W0103
+2026-11-02 07:54:19.617 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.053 temp=24.6 rf_fwd=249 rf_ref=3.3 gas=39.6 sub=W0102
+2026-11-02 07:54:19.617 | INFO  | TEST-CHB     | T-CHB | STEP_END step=PROCESS sub=W0102
+2026-11-02 07:54:20.555 | INFO  | TEST-CHB     | T-CHB | STEP_START step=PROCESS2 sub=W0102 rf_set=450 gas_set=80
+2026-11-02 07:54:20.862 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.055 temp=24.9 rf_fwd=447 rf_ref=5.8 gas=80.0 sub=W0101
+2026-11-02 07:54:21.641 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.050 temp=26.7 rf_fwd=252 rf_ref=4.6 gas=40.3 sub=W0103
+2026-11-02 07:54:23.555 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.048 temp=26.1 rf_fwd=449 rf_ref=4.9 gas=81.0 sub=W0102
+2026-11-02 07:54:23.862 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.055 temp=27.5 rf_fwd=448 rf_ref=2.6 gas=80.1 sub=W0101
+2026-11-02 07:54:24.641 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.048 temp=27.4 rf_fwd=253 rf_ref=2.2 gas=38.9 sub=W0103
+2026-11-02 07:54:26.555 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.045 temp=26.9 rf_fwd=448 rf_ref=5.9 gas=80.4 sub=W0102
+2026-11-02 07:54:26.862 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.048 temp=24.6 rf_fwd=447 rf_ref=4.0 gas=80.0 sub=W0101
+2026-11-02 07:54:27.641 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.053 temp=27.5 rf_fwd=250 rf_ref=5.3 gas=39.4 sub=W0103
+2026-11-02 07:54:29.555 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.048 temp=24.6 rf_fwd=452 rf_ref=5.4 gas=80.8 sub=W0102
+2026-11-02 07:54:29.862 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.049 temp=25.3 rf_fwd=449 rf_ref=4.4 gas=80.1 sub=W0101
+2026-11-02 07:54:30.641 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.050 temp=26.0 rf_fwd=248 rf_ref=4.9 gas=40.4 sub=W0103
+2026-11-02 07:54:32.555 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=26.7 rf_fwd=448 rf_ref=3.0 gas=80.0 sub=W0102
+2026-11-02 07:54:32.862 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.049 temp=26.3 rf_fwd=448 rf_ref=3.0 gas=79.4 sub=W0101
+2026-11-02 07:54:32.862 | INFO  | TEST-CHA     | T-CHA | STEP_END step=PROCESS2 sub=W0101
+2026-11-02 07:54:33.381 | INFO  | TEST-CHA     | T-CHA | STEP_START step=PURGE sub=W0101 gas_set=200
+2026-11-02 07:54:33.641 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.053 temp=27.9 rf_fwd=253 rf_ref=5.1 gas=40.8 sub=W0103
+2026-11-02 07:54:35.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.120 pump_rpm=5919
+2026-11-02 07:54:35.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=9.7 temp_c=18.1
+2026-11-02 07:54:35.555 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.052 temp=27.0 rf_fwd=452 rf_ref=5.8 gas=78.8 sub=W0102
+2026-11-02 07:54:36.381 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.050 temp=24.9 gas=200.2 sub=W0101
+2026-11-02 07:54:36.641 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.054 temp=26.7 rf_fwd=251 rf_ref=5.7 gas=40.7 sub=W0103
+2026-11-02 07:54:38.555 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=24.1 rf_fwd=449 rf_ref=4.3 gas=80.3 sub=W0102
+2026-11-02 07:54:39.381 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.050 temp=26.4 gas=199.0 sub=W0101
+2026-11-02 07:54:39.641 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.054 temp=25.8 rf_fwd=251 rf_ref=5.4 gas=40.3 sub=W0103
+2026-11-02 07:54:41.555 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.050 temp=26.1 rf_fwd=451 rf_ref=4.4 gas=79.6 sub=W0102
+2026-11-02 07:54:42.381 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.049 temp=27.5 gas=200.5 sub=W0101
+2026-11-02 07:54:42.641 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.051 temp=26.6 rf_fwd=253 rf_ref=4.4 gas=39.8 sub=W0103
+2026-11-02 07:54:42.641 | INFO  | TEST-CHC     | T-CHC | STEP_END step=PROCESS sub=W0103
+2026-11-02 07:54:42.985 | INFO  | TEST-CHC     | T-CHC | STEP_START step=PROCESS2 sub=W0103 rf_set=450 gas_set=80
+2026-11-02 07:54:44.555 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.051 temp=24.3 rf_fwd=449 rf_ref=2.6 gas=81.1 sub=W0102
+2026-11-02 07:54:45.381 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.054 temp=26.0 gas=200.2 sub=W0101
+2026-11-02 07:54:45.985 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.055 temp=27.9 rf_fwd=449 rf_ref=2.3 gas=80.5 sub=W0103
+2026-11-02 07:54:47.555 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=24.5 rf_fwd=450 rf_ref=3.6 gas=80.3 sub=W0102
+2026-11-02 07:54:48.381 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.055 temp=27.4 gas=200.7 sub=W0101
+2026-11-02 07:54:48.381 | INFO  | TEST-CHA     | T-CHA | STEP_END step=PURGE sub=W0101
+2026-11-02 07:54:48.985 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.052 temp=26.9 rf_fwd=448 rf_ref=4.8 gas=79.4 sub=W0103
+2026-11-02 07:54:49.327 | INFO  | TEST-CHA     | T-CHA | STEP_START step=VENT sub=W0101 pressure_set=760
+2026-11-02 07:54:50.555 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.052 temp=27.9 rf_fwd=450 rf_ref=2.4 gas=79.6 sub=W0102
+2026-11-02 07:54:51.985 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.049 temp=27.0 rf_fwd=448 rf_ref=2.9 gas=78.9 sub=W0103
+2026-11-02 07:54:52.327 | INFO  | TEST-CHA     | T-CHA | TEL pressure=748.0 temp=25.7 sub=W0101
+2026-11-02 07:54:53.555 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.053 temp=25.1 rf_fwd=451 rf_ref=3.1 gas=79.6 sub=W0102
+2026-11-02 07:54:54.985 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.049 temp=27.2 rf_fwd=448 rf_ref=4.7 gas=81.1 sub=W0103
+2026-11-02 07:54:55.327 | INFO  | TEST-CHA     | T-CHA | TEL pressure=759.1 temp=25.6 sub=W0101
+2026-11-02 07:54:56.555 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=25.7 rf_fwd=449 rf_ref=2.1 gas=80.8 sub=W0102
+2026-11-02 07:54:57.985 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.046 temp=27.0 rf_fwd=450 rf_ref=2.4 gas=80.3 sub=W0103
+2026-11-02 07:54:58.327 | INFO  | TEST-CHA     | T-CHA | TEL pressure=747.3 temp=24.2 sub=W0101
+2026-11-02 07:54:59.555 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.054 temp=25.0 rf_fwd=449 rf_ref=6.0 gas=79.3 sub=W0102
+2026-11-02 07:55:00.985 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.050 temp=26.0 rf_fwd=453 rf_ref=4.0 gas=78.8 sub=W0103
+2026-11-02 07:55:01.327 | INFO  | TEST-CHA     | T-CHA | TEL pressure=756.9 temp=27.2 sub=W0101
+2026-11-02 07:55:02.555 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.052 temp=26.6 rf_fwd=448 rf_ref=5.9 gas=80.8 sub=W0102
+2026-11-02 07:55:03.985 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.049 temp=27.9 rf_fwd=449 rf_ref=2.1 gas=79.6 sub=W0103
+2026-11-02 07:55:04.327 | INFO  | TEST-CHA     | T-CHA | TEL pressure=748.4 temp=27.7 sub=W0101
+2026-11-02 07:55:04.327 | INFO  | TEST-CHA     | T-CHA | STEP_END step=VENT sub=W0101
+2026-11-02 07:55:04.863 | INFO  | TEST-CHA     | T-CHA | RECIPE_END recipe=TEST-RCP-2 sub=W0101 result=OK
+2026-11-02 07:55:05.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.093 pump_rpm=6073
+2026-11-02 07:55:05.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=9.7 temp_c=20.2
+2026-11-02 07:55:05.555 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.048 temp=24.1 rf_fwd=453 rf_ref=4.6 gas=79.9 sub=W0102
+2026-11-02 07:55:05.634 | INFO  | TEST-CHA     | T-CHA | DOOR state=OPEN sub=W0101
+2026-11-02 07:55:05.634 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-CHA dst=TEST-LP1 sub=W0101
+2026-11-02 07:55:06.985 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.051 temp=24.0 rf_fwd=449 rf_ref=2.3 gas=80.1 sub=W0103
+2026-11-02 07:55:08.555 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.048 temp=25.4 rf_fwd=449 rf_ref=5.1 gas=80.4 sub=W0102
+2026-11-02 07:55:08.555 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-CHA sub=W0101 vacuum=OK
+2026-11-02 07:55:09.985 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.054 temp=27.9 rf_fwd=448 rf_ref=5.1 gas=81.0 sub=W0103
+2026-11-02 07:55:11.555 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.049 temp=24.7 rf_fwd=449 rf_ref=4.1 gas=80.5 sub=W0102
+2026-11-02 07:55:12.294 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-LP1 sub=W0101
+2026-11-02 07:55:12.951 | INFO  | TEST-SCHED   | T-SCHED | SUB_DONE sub=W0101 chamber=A
+2026-11-02 07:55:12.985 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.052 temp=24.6 rf_fwd=452 rf_ref=3.5 gas=79.3 sub=W0103
+2026-11-02 07:55:13.809 | INFO  | TEST-SCHED   | T-SCHED | DISPATCH sub=W0104 chamber=A
+2026-11-02 07:55:14.009 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-LP1 dst=TEST-ALIGNER sub=W0104
+2026-11-02 07:55:14.555 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.052 temp=24.7 rf_fwd=453 rf_ref=5.8 gas=79.0 sub=W0102
+2026-11-02 07:55:15.985 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.053 temp=24.1 rf_fwd=452 rf_ref=4.0 gas=80.9 sub=W0103
+2026-11-02 07:55:16.414 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-LP1 sub=W0104 vacuum=OK
+2026-11-02 07:55:17.555 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=26.2 rf_fwd=450 rf_ref=2.8 gas=80.1 sub=W0102
+2026-11-02 07:55:17.555 | INFO  | TEST-CHB     | T-CHB | STEP_END step=PROCESS2 sub=W0102
+2026-11-02 07:55:18.365 | INFO  | TEST-CHB     | T-CHB | STEP_START step=PURGE sub=W0102 gas_set=200
+2026-11-02 07:55:18.985 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.049 temp=25.4 rf_fwd=452 rf_ref=3.5 gas=78.8 sub=W0103
+2026-11-02 07:55:19.832 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-ALIGNER sub=W0104
+2026-11-02 07:55:20.382 | INFO  | TEST-ALIGNER | T-ALIGN | ALIGN_START sub=W0104
+2026-11-02 07:55:21.365 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.048 temp=27.8 gas=200.8 sub=W0102
+2026-11-02 07:55:21.985 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.054 temp=25.2 rf_fwd=448 rf_ref=5.2 gas=80.3 sub=W0103
+2026-11-02 07:55:24.365 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.051 temp=26.4 gas=200.8 sub=W0102
+2026-11-02 07:55:24.985 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.049 temp=28.0 rf_fwd=448 rf_ref=4.8 gas=79.9 sub=W0103
+2026-11-02 07:55:25.684 | INFO  | TEST-ALIGNER | T-ALIGN | ALIGN_DONE sub=W0104 offset_deg=-0.04
+2026-11-02 07:55:25.984 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-ALIGNER dst=TEST-CHA sub=W0104
+2026-11-02 07:55:27.365 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.049 temp=25.8 gas=200.3 sub=W0102
+2026-11-02 07:55:27.985 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.050 temp=24.5 rf_fwd=449 rf_ref=3.3 gas=78.9 sub=W0103
+2026-11-02 07:55:28.926 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-ALIGNER sub=W0104 vacuum=OK
+2026-11-02 07:55:30.365 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=27.6 gas=200.0 sub=W0102
+2026-11-02 07:55:30.985 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.049 temp=27.6 rf_fwd=449 rf_ref=3.5 gas=80.8 sub=W0103
+2026-11-02 07:55:33.365 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.053 temp=27.7 gas=199.5 sub=W0102
+2026-11-02 07:55:33.365 | INFO  | TEST-CHB     | T-CHB | STEP_END step=PURGE sub=W0102
+2026-11-02 07:55:33.403 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-CHA sub=W0104
+2026-11-02 07:55:33.985 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.053 temp=26.8 rf_fwd=453 rf_ref=4.4 gas=80.3 sub=W0103
+2026-11-02 07:55:34.083 | INFO  | TEST-CHB     | T-CHB | STEP_START step=VENT sub=W0102 pressure_set=760
+2026-11-02 07:55:34.791 | INFO  | TEST-CHA     | T-CHA | DOOR state=CLOSED sub=W0104
+2026-11-02 07:55:35.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.105 pump_rpm=5932
+2026-11-02 07:55:35.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=9.6 temp_c=20.3
+2026-11-02 07:55:35.805 | INFO  | TEST-CHA     | T-CHA | RECIPE_START recipe=TEST-RCP-2 sub=W0104
+2026-11-02 07:55:35.805 | INFO  | TEST-CHA     | T-CHA | STEP_START step=PUMP sub=W0104 pressure_set=0.05
+2026-11-02 07:55:36.985 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.045 temp=28.0 rf_fwd=450 rf_ref=5.4 gas=80.0 sub=W0103
+2026-11-02 07:55:37.083 | INFO  | TEST-CHB     | T-CHB | TEL pressure=748.4 temp=27.5 sub=W0102
+2026-11-02 07:55:38.805 | INFO  | TEST-CHA     | T-CHA | TEL pressure=190.000 temp=24.7 sub=W0104
+2026-11-02 07:55:39.985 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.054 temp=28.0 rf_fwd=453 rf_ref=2.4 gas=80.4 sub=W0103
+2026-11-02 07:55:39.985 | INFO  | TEST-CHC     | T-CHC | STEP_END step=PROCESS2 sub=W0103
+2026-11-02 07:55:40.083 | INFO  | TEST-CHB     | T-CHB | TEL pressure=762.8 temp=25.7 sub=W0102
+2026-11-02 07:55:40.402 | INFO  | TEST-CHC     | T-CHC | STEP_START step=PURGE sub=W0103 gas_set=200
+2026-11-02 07:55:41.805 | INFO  | TEST-CHA     | T-CHA | TEL pressure=47.500 temp=24.7 sub=W0104
+2026-11-02 07:55:43.083 | INFO  | TEST-CHB     | T-CHB | TEL pressure=765.9 temp=25.6 sub=W0102
+2026-11-02 07:55:43.402 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.051 temp=24.0 gas=200.0 sub=W0103
+2026-11-02 07:55:44.805 | INFO  | TEST-CHA     | T-CHA | TEL pressure=11.875 temp=26.3 sub=W0104
+2026-11-02 07:55:46.083 | INFO  | TEST-CHB     | T-CHB | TEL pressure=773.1 temp=25.4 sub=W0102
+2026-11-02 07:55:46.402 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.049 temp=26.5 gas=199.4 sub=W0103
+2026-11-02 07:55:47.805 | INFO  | TEST-CHA     | T-CHA | TEL pressure=2.969 temp=24.4 sub=W0104
+2026-11-02 07:55:49.083 | INFO  | TEST-CHB     | T-CHB | TEL pressure=749.9 temp=27.4 sub=W0102
+2026-11-02 07:55:49.083 | INFO  | TEST-CHB     | T-CHB | STEP_END step=VENT sub=W0102
+2026-11-02 07:55:49.402 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.048 temp=26.7 gas=199.2 sub=W0103
+2026-11-02 07:55:49.602 | INFO  | TEST-CHB     | T-CHB | RECIPE_END recipe=TEST-RCP-2 sub=W0102 result=OK
+2026-11-02 07:55:50.382 | INFO  | TEST-CHB     | T-CHB | DOOR state=OPEN sub=W0102
+2026-11-02 07:55:50.382 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-CHB dst=TEST-LP1 sub=W0102
+2026-11-02 07:55:50.805 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.742 temp=27.6 sub=W0104
+2026-11-02 07:55:52.402 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.048 temp=26.3 gas=200.8 sub=W0103
+2026-11-02 07:55:52.402 | INFO  | TEST-CHC     | T-CHC | STEP_END step=PURGE sub=W0103
+2026-11-02 07:55:52.474 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-CHB sub=W0102 vacuum=OK
+2026-11-02 07:55:53.188 | INFO  | TEST-CHC     | T-CHC | STEP_START step=VENT sub=W0103 pressure_set=760
+2026-11-02 07:55:53.805 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.186 temp=27.5 sub=W0104
+2026-11-02 07:55:56.188 | INFO  | TEST-CHC     | T-CHC | TEL pressure=768.3 temp=24.6 sub=W0103
+2026-11-02 07:55:56.805 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.046 temp=24.8 sub=W0104
+2026-11-02 07:55:57.587 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-LP1 sub=W0102
+2026-11-02 07:55:58.776 | INFO  | TEST-SCHED   | T-SCHED | SUB_DONE sub=W0102 chamber=B
+2026-11-02 07:55:59.188 | INFO  | TEST-CHC     | T-CHC | TEL pressure=748.5 temp=24.6 sub=W0103
+2026-11-02 07:55:59.681 | INFO  | TEST-SCHED   | T-SCHED | DISPATCH sub=W0105 chamber=B
+2026-11-02 07:55:59.805 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.040 temp=24.6 sub=W0104
+2026-11-02 07:55:59.805 | INFO  | TEST-CHA     | T-CHA | STEP_END step=PUMP sub=W0104
+2026-11-02 07:55:59.881 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-LP1 dst=TEST-ALIGNER sub=W0105
+2026-11-02 07:56:00.395 | INFO  | TEST-CHA     | T-CHA | STEP_START step=PROCESS sub=W0104 rf_set=250 gas_set=40
+2026-11-02 07:56:02.188 | INFO  | TEST-CHC     | T-CHC | TEL pressure=772.4 temp=25.8 sub=W0103
+2026-11-02 07:56:02.438 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-LP1 sub=W0105 vacuum=OK
+2026-11-02 07:56:03.395 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.054 temp=26.0 rf_fwd=251 rf_ref=5.6 gas=40.5 sub=W0104
+2026-11-02 07:56:05.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.104 pump_rpm=6008
+2026-11-02 07:56:05.188 | INFO  | TEST-CHC     | T-CHC | TEL pressure=756.4 temp=26.2 sub=W0103
+2026-11-02 07:56:05.188 | INFO  | TEST-CHC     | T-CHC | STEP_END step=VENT sub=W0103
+2026-11-02 07:56:05.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=10.4 temp_c=20.8
+2026-11-02 07:56:05.701 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-ALIGNER sub=W0105
+2026-11-02 07:56:05.977 | INFO  | TEST-CHC     | T-CHC | RECIPE_END recipe=TEST-RCP-2 sub=W0103 result=OK
+2026-11-02 07:56:06.395 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.054 temp=25.1 rf_fwd=248 rf_ref=2.0 gas=39.4 sub=W0104
+2026-11-02 07:56:06.418 | INFO  | TEST-ALIGNER | T-ALIGN | ALIGN_START sub=W0105
+2026-11-02 07:56:07.003 | INFO  | TEST-CHC     | T-CHC | DOOR state=OPEN sub=W0103
+2026-11-02 07:56:09.395 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.052 temp=25.0 rf_fwd=252 rf_ref=5.3 gas=38.9 sub=W0104
+2026-11-02 07:56:12.395 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.055 temp=27.4 rf_fwd=248 rf_ref=5.1 gas=39.0 sub=W0104
+2026-11-02 07:56:12.825 | INFO  | TEST-ALIGNER | T-ALIGN | ALIGN_DONE sub=W0105 offset_deg=-0.02
+2026-11-02 07:56:13.125 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-ALIGNER dst=TEST-CHB sub=W0105
+2026-11-02 07:56:15.395 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.045 temp=27.7 rf_fwd=250 rf_ref=3.7 gas=39.7 sub=W0104
+2026-11-02 07:56:16.481 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-ALIGNER sub=W0105 vacuum=OK
+2026-11-02 07:56:18.395 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.051 temp=25.2 rf_fwd=250 rf_ref=5.4 gas=39.8 sub=W0104
+2026-11-02 07:56:21.395 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.047 temp=24.1 rf_fwd=248 rf_ref=2.3 gas=39.8 sub=W0104
+2026-11-02 07:56:22.287 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-CHB sub=W0105
+2026-11-02 07:56:23.132 | INFO  | TEST-CHB     | T-CHB | DOOR state=CLOSED sub=W0105
+2026-11-02 07:56:24.395 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.047 temp=27.2 rf_fwd=250 rf_ref=3.2 gas=40.4 sub=W0104
+2026-11-02 07:56:24.459 | INFO  | TEST-CHB     | T-CHB | RECIPE_START recipe=TEST-RCP-2 sub=W0105
+2026-11-02 07:56:24.459 | INFO  | TEST-CHB     | T-CHB | STEP_START step=PUMP sub=W0105 pressure_set=0.05
+2026-11-02 07:56:24.831 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-CHC dst=TEST-LP1 sub=W0103
+2026-11-02 07:56:27.048 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-CHC sub=W0103 vacuum=OK
+2026-11-02 07:56:27.395 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.050 temp=26.7 rf_fwd=247 rf_ref=3.2 gas=40.9 sub=W0104
+2026-11-02 07:56:27.459 | INFO  | TEST-CHB     | T-CHB | TEL pressure=190.000 temp=26.5 sub=W0105
+2026-11-02 07:56:30.395 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.051 temp=24.8 rf_fwd=249 rf_ref=4.6 gas=41.2 sub=W0104
+2026-11-02 07:56:30.459 | INFO  | TEST-CHB     | T-CHB | TEL pressure=47.500 temp=26.5 sub=W0105
+2026-11-02 07:56:32.429 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-LP1 sub=W0103
+2026-11-02 07:56:33.395 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.048 temp=27.4 rf_fwd=251 rf_ref=2.6 gas=39.9 sub=W0104
+2026-11-02 07:56:33.459 | INFO  | TEST-CHB     | T-CHB | TEL pressure=11.875 temp=27.5 sub=W0105
+2026-11-02 07:56:33.627 | INFO  | TEST-SCHED   | T-SCHED | SUB_DONE sub=W0103 chamber=C
+2026-11-02 07:56:35.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.087 pump_rpm=6047
+2026-11-02 07:56:35.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=9.6 temp_c=19.2
+2026-11-02 07:56:35.569 | INFO  | TEST-SCHED   | T-SCHED | DISPATCH sub=W0106 chamber=C
+2026-11-02 07:56:35.769 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-LP1 dst=TEST-ALIGNER sub=W0106
+2026-11-02 07:56:36.395 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.051 temp=24.6 rf_fwd=247 rf_ref=3.2 gas=39.2 sub=W0104
+2026-11-02 07:56:36.459 | INFO  | TEST-CHB     | T-CHB | TEL pressure=2.969 temp=26.3 sub=W0105
+2026-11-02 07:56:38.514 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-LP1 sub=W0106 vacuum=OK
+2026-11-02 07:56:39.395 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.048 temp=26.8 rf_fwd=252 rf_ref=2.7 gas=40.5 sub=W0104
+2026-11-02 07:56:39.459 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.742 temp=24.2 sub=W0105
+2026-11-02 07:56:42.297 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-ALIGNER sub=W0106
+2026-11-02 07:56:42.395 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.048 temp=24.9 rf_fwd=252 rf_ref=3.4 gas=39.2 sub=W0104
+2026-11-02 07:56:42.459 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.186 temp=26.2 sub=W0105
+2026-11-02 07:56:43.485 | INFO  | TEST-ALIGNER | T-ALIGN | ALIGN_START sub=W0106
+2026-11-02 07:56:45.395 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.045 temp=27.3 rf_fwd=252 rf_ref=4.9 gas=39.2 sub=W0104
+2026-11-02 07:56:45.459 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=26.2 sub=W0105
+2026-11-02 07:56:45.459 | INFO  | TEST-CHB     | T-CHB | STEP_END step=PUMP sub=W0105
+2026-11-02 07:56:46.100 | INFO  | TEST-CHB     | T-CHB | STEP_START step=PROCESS sub=W0105 rf_set=250 gas_set=40
+2026-11-02 07:56:47.726 | INFO  | TEST-ALIGNER | T-ALIGN | ALIGN_DONE sub=W0106 offset_deg=0.14
+2026-11-02 07:56:48.026 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-ALIGNER dst=TEST-CHC sub=W0106
+2026-11-02 07:56:48.395 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.048 temp=26.4 rf_fwd=253 rf_ref=3.4 gas=39.0 sub=W0104
+2026-11-02 07:56:49.100 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.049 temp=25.1 rf_fwd=248 rf_ref=2.2 gas=40.8 sub=W0105
+2026-11-02 07:56:50.822 | WARN  | TEST-ROBOT   | T-ROBOT | GRIP_RETRY station=TEST-ALIGNER sub=W0106 retry=1
+2026-11-02 07:56:51.395 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.053 temp=25.7 rf_fwd=252 rf_ref=5.8 gas=38.8 sub=W0104
+2026-11-02 07:56:51.855 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-ALIGNER sub=W0106 vacuum=OK
+2026-11-02 07:56:52.100 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.052 temp=24.2 rf_fwd=250 rf_ref=2.4 gas=38.9 sub=W0105
+2026-11-02 07:56:54.395 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.053 temp=25.0 rf_fwd=249 rf_ref=5.4 gas=39.3 sub=W0104
+2026-11-02 07:56:55.100 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.054 temp=24.2 rf_fwd=248 rf_ref=5.5 gas=39.8 sub=W0105
+2026-11-02 07:56:57.308 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-CHC sub=W0106
+2026-11-02 07:56:57.395 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.053 temp=25.8 rf_fwd=251 rf_ref=3.0 gas=38.9 sub=W0104
+2026-11-02 07:56:57.810 | INFO  | TEST-CHC     | T-CHC | DOOR state=CLOSED sub=W0106
+2026-11-02 07:56:58.100 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.047 temp=27.5 rf_fwd=249 rf_ref=4.1 gas=40.3 sub=W0105
+2026-11-02 07:56:58.653 | INFO  | TEST-CHC     | T-CHC | RECIPE_START recipe=TEST-RCP-2 sub=W0106
+2026-11-02 07:56:58.653 | INFO  | TEST-CHC     | T-CHC | STEP_START step=PUMP sub=W0106 pressure_set=0.05
+2026-11-02 07:57:00.395 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.050 temp=25.2 rf_fwd=248 rf_ref=3.7 gas=41.0 sub=W0104
+2026-11-02 07:57:00.395 | INFO  | TEST-CHA     | T-CHA | STEP_END step=PROCESS sub=W0104
+2026-11-02 07:57:00.901 | INFO  | TEST-CHA     | T-CHA | STEP_START step=PROCESS2 sub=W0104 rf_set=450 gas_set=80
+2026-11-02 07:57:01.100 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.047 temp=26.1 rf_fwd=252 rf_ref=4.4 gas=40.5 sub=W0105
+2026-11-02 07:57:01.653 | INFO  | TEST-CHC     | T-CHC | TEL pressure=190.000 temp=25.2 sub=W0106
+2026-11-02 07:57:03.901 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.054 temp=24.0 rf_fwd=453 rf_ref=5.5 gas=80.4 sub=W0104
+2026-11-02 07:57:04.100 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=27.5 rf_fwd=249 rf_ref=3.4 gas=39.8 sub=W0105
+2026-11-02 07:57:04.653 | INFO  | TEST-CHC     | T-CHC | TEL pressure=47.500 temp=25.0 sub=W0106
+2026-11-02 07:57:05.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.091 pump_rpm=6096
+2026-11-02 07:57:05.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=10.2 temp_c=20.9
+2026-11-02 07:57:06.901 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.055 temp=24.9 rf_fwd=448 rf_ref=4.6 gas=80.2 sub=W0104
+2026-11-02 07:57:07.100 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.049 temp=25.6 rf_fwd=249 rf_ref=3.3 gas=39.6 sub=W0105
+2026-11-02 07:57:07.653 | INFO  | TEST-CHC     | T-CHC | TEL pressure=11.875 temp=26.7 sub=W0106
+2026-11-02 07:57:09.901 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.054 temp=24.5 rf_fwd=451 rf_ref=3.1 gas=78.9 sub=W0104
+2026-11-02 07:57:10.100 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.045 temp=26.6 rf_fwd=253 rf_ref=5.0 gas=40.1 sub=W0105
+2026-11-02 07:57:10.653 | INFO  | TEST-CHC     | T-CHC | TEL pressure=2.969 temp=26.7 sub=W0106
+2026-11-02 07:57:12.901 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.054 temp=24.7 rf_fwd=451 rf_ref=2.8 gas=80.4 sub=W0104
+2026-11-02 07:57:13.100 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.050 temp=27.5 rf_fwd=253 rf_ref=4.8 gas=41.2 sub=W0105
+2026-11-02 07:57:13.653 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.742 temp=27.0 sub=W0106
+2026-11-02 07:57:15.901 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.049 temp=24.5 rf_fwd=450 rf_ref=3.3 gas=80.2 sub=W0104
+2026-11-02 07:57:16.100 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.051 temp=27.3 rf_fwd=249 rf_ref=5.1 gas=39.0 sub=W0105
+2026-11-02 07:57:16.653 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.186 temp=26.4 sub=W0106
+2026-11-02 07:57:16.653 | INFO  | TEST-CHC     | T-CHC | STEP_END step=PUMP sub=W0106
+2026-11-02 07:57:17.050 | INFO  | TEST-CHC     | T-CHC | STEP_START step=PROCESS sub=W0106 rf_set=250 gas_set=40
+2026-11-02 07:57:18.901 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.055 temp=25.1 rf_fwd=452 rf_ref=4.1 gas=79.3 sub=W0104
+2026-11-02 07:57:19.100 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.047 temp=25.9 rf_fwd=251 rf_ref=2.7 gas=40.7 sub=W0105
+2026-11-02 07:57:20.050 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.046 temp=24.5 rf_fwd=248 rf_ref=3.0 gas=41.2 sub=W0106
+2026-11-02 07:57:21.901 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.049 temp=27.7 rf_fwd=449 rf_ref=3.7 gas=80.7 sub=W0104
+2026-11-02 07:57:22.100 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=24.4 rf_fwd=247 rf_ref=3.3 gas=38.9 sub=W0105
+2026-11-02 07:57:23.050 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.045 temp=25.7 rf_fwd=251 rf_ref=3.2 gas=38.8 sub=W0106
+2026-11-02 07:57:24.901 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.048 temp=25.0 rf_fwd=452 rf_ref=5.6 gas=81.1 sub=W0104
+2026-11-02 07:57:25.100 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.045 temp=24.2 rf_fwd=252 rf_ref=4.2 gas=38.9 sub=W0105
+2026-11-02 07:57:26.050 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.046 temp=26.8 rf_fwd=250 rf_ref=5.5 gas=40.6 sub=W0106
+2026-11-02 07:57:27.901 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.050 temp=25.8 rf_fwd=452 rf_ref=3.7 gas=80.6 sub=W0104
+2026-11-02 07:57:28.100 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.048 temp=25.7 rf_fwd=252 rf_ref=3.4 gas=39.3 sub=W0105
+2026-11-02 07:57:29.050 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.052 temp=26.3 rf_fwd=249 rf_ref=4.6 gas=40.5 sub=W0106
+2026-11-02 07:57:30.901 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.053 temp=24.7 rf_fwd=448 rf_ref=3.5 gas=80.7 sub=W0104
+2026-11-02 07:57:31.100 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.052 temp=27.2 rf_fwd=251 rf_ref=2.2 gas=39.6 sub=W0105
+2026-11-02 07:57:32.050 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.048 temp=27.7 rf_fwd=253 rf_ref=3.6 gas=39.8 sub=W0106
+2026-11-02 07:57:33.901 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.055 temp=25.0 rf_fwd=452 rf_ref=5.1 gas=79.5 sub=W0104
+2026-11-02 07:57:34.100 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.048 temp=24.1 rf_fwd=251 rf_ref=3.6 gas=41.1 sub=W0105
+2026-11-02 07:57:35.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.096 pump_rpm=6041
+2026-11-02 07:57:35.050 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.053 temp=25.6 rf_fwd=252 rf_ref=4.6 gas=39.9 sub=W0106
+2026-11-02 07:57:35.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=10.4 temp_c=18.8
+2026-11-02 07:57:36.901 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.046 temp=27.8 rf_fwd=452 rf_ref=4.9 gas=80.3 sub=W0104
+2026-11-02 07:57:37.100 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.054 temp=25.9 rf_fwd=250 rf_ref=4.8 gas=40.4 sub=W0105
+2026-11-02 07:57:38.050 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.052 temp=26.8 rf_fwd=247 rf_ref=5.5 gas=38.8 sub=W0106
+2026-11-02 07:57:39.901 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.051 temp=27.8 rf_fwd=450 rf_ref=2.1 gas=80.8 sub=W0104
+2026-11-02 07:57:39.901 | INFO  | TEST-CHA     | T-CHA | STEP_END step=PROCESS2 sub=W0104
+2026-11-02 07:57:40.100 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.052 temp=24.2 rf_fwd=252 rf_ref=3.6 gas=40.1 sub=W0105
+2026-11-02 07:57:40.592 | INFO  | TEST-CHA     | T-CHA | STEP_START step=PURGE sub=W0104 gas_set=200
+2026-11-02 07:57:41.050 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.051 temp=24.6 rf_fwd=250 rf_ref=2.9 gas=39.0 sub=W0106
+2026-11-02 07:57:43.100 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.055 temp=25.4 rf_fwd=250 rf_ref=3.1 gas=39.2 sub=W0105
+2026-11-02 07:57:43.592 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.053 temp=27.0 gas=199.7 sub=W0104
+2026-11-02 07:57:44.050 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.047 temp=26.3 rf_fwd=251 rf_ref=5.4 gas=39.8 sub=W0106
+2026-11-02 07:57:46.100 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.052 temp=27.6 rf_fwd=249 rf_ref=3.1 gas=40.8 sub=W0105
+2026-11-02 07:57:46.100 | INFO  | TEST-CHB     | T-CHB | STEP_END step=PROCESS sub=W0105
+2026-11-02 07:57:46.441 | INFO  | TEST-CHB     | T-CHB | STEP_START step=PROCESS2 sub=W0105 rf_set=450 gas_set=80
+2026-11-02 07:57:46.592 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.052 temp=24.3 gas=201.2 sub=W0104
+2026-11-02 07:57:47.050 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.050 temp=27.3 rf_fwd=252 rf_ref=5.0 gas=39.4 sub=W0106
+2026-11-02 07:57:49.441 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.053 temp=24.4 rf_fwd=449 rf_ref=3.7 gas=79.0 sub=W0105
+2026-11-02 07:57:49.592 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.052 temp=27.8 gas=199.4 sub=W0104
+2026-11-02 07:57:50.050 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.051 temp=24.3 rf_fwd=248 rf_ref=5.8 gas=39.2 sub=W0106
+2026-11-02 07:57:52.441 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.048 temp=26.1 rf_fwd=453 rf_ref=2.8 gas=80.2 sub=W0105
+2026-11-02 07:57:52.592 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.046 temp=26.8 gas=200.1 sub=W0104
+2026-11-02 07:57:53.050 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.048 temp=25.3 rf_fwd=250 rf_ref=3.5 gas=38.8 sub=W0106
+2026-11-02 07:57:55.441 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.054 temp=26.5 rf_fwd=451 rf_ref=4.1 gas=81.0 sub=W0105
+2026-11-02 07:57:55.592 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.051 temp=26.1 gas=200.7 sub=W0104
+2026-11-02 07:57:55.592 | INFO  | TEST-CHA     | T-CHA | STEP_END step=PURGE sub=W0104
+2026-11-02 07:57:56.050 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.051 temp=25.7 rf_fwd=248 rf_ref=2.4 gas=40.4 sub=W0106
+2026-11-02 07:57:56.149 | INFO  | TEST-CHA     | T-CHA | STEP_START step=VENT sub=W0104 pressure_set=760
+2026-11-02 07:57:58.441 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.055 temp=24.8 rf_fwd=448 rf_ref=2.7 gas=79.1 sub=W0105
+2026-11-02 07:57:59.050 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.054 temp=24.9 rf_fwd=251 rf_ref=5.7 gas=39.8 sub=W0106
+2026-11-02 07:57:59.149 | INFO  | TEST-CHA     | T-CHA | TEL pressure=773.9 temp=28.0 sub=W0104
+2026-11-02 07:58:01.441 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.049 temp=24.7 rf_fwd=449 rf_ref=3.9 gas=79.2 sub=W0105
+2026-11-02 07:58:02.050 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.052 temp=26.5 rf_fwd=250 rf_ref=3.3 gas=40.8 sub=W0106
+2026-11-02 07:58:02.149 | INFO  | TEST-CHA     | T-CHA | TEL pressure=766.0 temp=24.2 sub=W0104
+2026-11-02 07:58:04.441 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.053 temp=24.7 rf_fwd=451 rf_ref=3.2 gas=80.2 sub=W0105
+2026-11-02 07:58:05.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.091 pump_rpm=6060
+2026-11-02 07:58:05.050 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.053 temp=27.9 rf_fwd=250 rf_ref=4.2 gas=40.2 sub=W0106
+2026-11-02 07:58:05.050 | INFO  | TEST-CHC     | T-CHC | STEP_END step=PROCESS sub=W0106
+2026-11-02 07:58:05.149 | INFO  | TEST-CHA     | T-CHA | TEL pressure=752.3 temp=25.8 sub=W0104
+2026-11-02 07:58:05.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=10.3 temp_c=18.9
+2026-11-02 07:58:05.694 | INFO  | TEST-CHC     | T-CHC | STEP_START step=PROCESS2 sub=W0106 rf_set=450 gas_set=80
+2026-11-02 07:58:07.441 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.051 temp=26.1 rf_fwd=448 rf_ref=2.8 gas=80.8 sub=W0105
+2026-11-02 07:58:08.149 | INFO  | TEST-CHA     | T-CHA | TEL pressure=749.7 temp=24.9 sub=W0104
+2026-11-02 07:58:08.149 | INFO  | TEST-CHA     | T-CHA | STEP_END step=VENT sub=W0104
+2026-11-02 07:58:08.694 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.052 temp=24.8 rf_fwd=448 rf_ref=2.1 gas=80.2 sub=W0106
+2026-11-02 07:58:08.904 | INFO  | TEST-CHA     | T-CHA | RECIPE_END recipe=TEST-RCP-2 sub=W0104 result=OK
+2026-11-02 07:58:09.712 | INFO  | TEST-CHA     | T-CHA | DOOR state=OPEN sub=W0104
+2026-11-02 07:58:09.712 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-CHA dst=TEST-LP1 sub=W0104
+2026-11-02 07:58:10.441 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.047 temp=24.6 rf_fwd=453 rf_ref=2.7 gas=79.6 sub=W0105
+2026-11-02 07:58:11.694 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.049 temp=24.3 rf_fwd=448 rf_ref=2.7 gas=80.5 sub=W0106
+2026-11-02 07:58:12.091 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-CHA sub=W0104 vacuum=OK
+2026-11-02 07:58:13.441 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=27.2 rf_fwd=448 rf_ref=4.9 gas=78.9 sub=W0105
+2026-11-02 07:58:14.694 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.045 temp=25.7 rf_fwd=449 rf_ref=3.9 gas=79.8 sub=W0106
+2026-11-02 07:58:16.441 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.051 temp=24.7 rf_fwd=447 rf_ref=3.8 gas=79.9 sub=W0105
+2026-11-02 07:58:17.694 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.047 temp=27.9 rf_fwd=447 rf_ref=3.3 gas=81.0 sub=W0106
+2026-11-02 07:58:18.081 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-LP1 sub=W0104
+2026-11-02 07:58:18.674 | INFO  | TEST-SCHED   | T-SCHED | SUB_DONE sub=W0104 chamber=A
+2026-11-02 07:58:19.441 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=27.7 rf_fwd=452 rf_ref=2.8 gas=79.2 sub=W0105
+2026-11-02 07:58:19.913 | INFO  | TEST-SCHED   | T-SCHED | DISPATCH sub=W0107 chamber=A
+2026-11-02 07:58:20.113 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-LP1 dst=TEST-ALIGNER sub=W0107
+2026-11-02 07:58:20.694 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.047 temp=25.2 rf_fwd=449 rf_ref=4.9 gas=80.2 sub=W0106
+2026-11-02 07:58:22.441 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.053 temp=27.6 rf_fwd=449 rf_ref=3.1 gas=79.3 sub=W0105
+2026-11-02 07:58:22.802 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-LP1 sub=W0107 vacuum=OK
+2026-11-02 07:58:23.694 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.052 temp=25.3 rf_fwd=448 rf_ref=5.5 gas=80.2 sub=W0106
+2026-11-02 07:58:25.441 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.053 temp=27.8 rf_fwd=452 rf_ref=4.7 gas=79.2 sub=W0105
+2026-11-02 07:58:26.694 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.053 temp=26.1 rf_fwd=451 rf_ref=2.7 gas=80.8 sub=W0106
+2026-11-02 07:58:28.081 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-ALIGNER sub=W0107
+2026-11-02 07:58:28.441 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.047 temp=25.8 rf_fwd=449 rf_ref=3.8 gas=79.1 sub=W0105
+2026-11-02 07:58:28.653 | INFO  | TEST-ALIGNER | T-ALIGN | ALIGN_START sub=W0107
+2026-11-02 07:58:29.694 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.054 temp=26.1 rf_fwd=451 rf_ref=6.0 gas=79.7 sub=W0106
+2026-11-02 07:58:31.441 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.045 temp=26.9 rf_fwd=451 rf_ref=2.9 gas=80.5 sub=W0105
+2026-11-02 07:58:32.694 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.051 temp=24.6 rf_fwd=447 rf_ref=5.7 gas=80.6 sub=W0106
+2026-11-02 07:58:33.963 | INFO  | TEST-ALIGNER | T-ALIGN | ALIGN_DONE sub=W0107 offset_deg=0.01
+2026-11-02 07:58:34.263 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-ALIGNER dst=TEST-CHA sub=W0107
+2026-11-02 07:58:34.441 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.054 temp=27.1 rf_fwd=448 rf_ref=2.4 gas=80.1 sub=W0105
+2026-11-02 07:58:35.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.100 pump_rpm=5914
+2026-11-02 07:58:35.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=9.6 temp_c=18.3
+2026-11-02 07:58:35.694 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.053 temp=24.6 rf_fwd=451 rf_ref=2.3 gas=79.3 sub=W0106
+2026-11-02 07:58:37.441 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.050 temp=26.5 rf_fwd=451 rf_ref=3.7 gas=80.6 sub=W0105
+2026-11-02 07:58:37.904 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-ALIGNER sub=W0107 vacuum=OK
+2026-11-02 07:58:38.694 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.050 temp=27.0 rf_fwd=451 rf_ref=4.7 gas=80.8 sub=W0106
+2026-11-02 07:58:40.441 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.049 temp=26.7 rf_fwd=451 rf_ref=2.1 gas=79.6 sub=W0105
+2026-11-02 07:58:41.694 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.046 temp=26.7 rf_fwd=451 rf_ref=3.1 gas=78.8 sub=W0106
+2026-11-02 07:58:42.741 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-CHA sub=W0107
+2026-11-02 07:58:43.432 | INFO  | TEST-CHA     | T-CHA | DOOR state=CLOSED sub=W0107
+2026-11-02 07:58:43.441 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.048 temp=24.0 rf_fwd=453 rf_ref=5.0 gas=79.0 sub=W0105
+2026-11-02 07:58:44.694 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.053 temp=24.4 rf_fwd=448 rf_ref=2.1 gas=79.6 sub=W0106
+2026-11-02 07:58:44.694 | INFO  | TEST-CHC     | T-CHC | STEP_END step=PROCESS2 sub=W0106
+2026-11-02 07:58:44.795 | INFO  | TEST-CHA     | T-CHA | RECIPE_START recipe=TEST-RCP-2 sub=W0107
+2026-11-02 07:58:44.795 | INFO  | TEST-CHA     | T-CHA | STEP_START step=PUMP sub=W0107 pressure_set=0.05
+2026-11-02 07:58:45.518 | INFO  | TEST-CHC     | T-CHC | STEP_START step=PURGE sub=W0106 gas_set=200
+2026-11-02 07:58:46.441 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.047 temp=24.1 rf_fwd=448 rf_ref=4.1 gas=80.4 sub=W0105
+2026-11-02 07:58:47.795 | INFO  | TEST-CHA     | T-CHA | TEL pressure=190.000 temp=26.6 sub=W0107
+2026-11-02 07:58:48.518 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.046 temp=26.9 gas=200.0 sub=W0106
+2026-11-02 07:58:49.441 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=26.2 rf_fwd=448 rf_ref=2.8 gas=78.9 sub=W0105
+2026-11-02 07:58:49.441 | INFO  | TEST-CHB     | T-CHB | STEP_END step=PROCESS2 sub=W0105
+2026-11-02 07:58:50.301 | INFO  | TEST-CHB     | T-CHB | STEP_START step=PURGE sub=W0105 gas_set=200
+2026-11-02 07:58:50.795 | INFO  | TEST-CHA     | T-CHA | TEL pressure=47.500 temp=27.7 sub=W0107
+2026-11-02 07:58:51.518 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.049 temp=26.1 gas=199.0 sub=W0106
+2026-11-02 07:58:53.301 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.054 temp=24.1 gas=200.3 sub=W0105
+2026-11-02 07:58:53.795 | INFO  | TEST-CHA     | T-CHA | TEL pressure=11.875 temp=24.3 sub=W0107
+2026-11-02 07:58:54.518 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.052 temp=25.5 gas=199.3 sub=W0106
+2026-11-02 07:58:56.301 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.054 temp=27.0 gas=200.3 sub=W0105
+2026-11-02 07:58:56.795 | INFO  | TEST-CHA     | T-CHA | TEL pressure=2.969 temp=26.5 sub=W0107
+2026-11-02 07:58:57.518 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.051 temp=24.6 gas=201.1 sub=W0106
+2026-11-02 07:58:57.518 | INFO  | TEST-CHC     | T-CHC | STEP_END step=PURGE sub=W0106
+2026-11-02 07:58:57.889 | INFO  | TEST-CHC     | T-CHC | STEP_START step=VENT sub=W0106 pressure_set=760
+2026-11-02 07:58:59.301 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.054 temp=24.9 gas=200.6 sub=W0105
+2026-11-02 07:58:59.795 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.742 temp=28.0 sub=W0107
+2026-11-02 07:59:00.889 | INFO  | TEST-CHC     | T-CHC | TEL pressure=768.3 temp=24.2 sub=W0106
+2026-11-02 07:59:02.301 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.054 temp=26.4 gas=199.6 sub=W0105
+2026-11-02 07:59:02.795 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.186 temp=24.8 sub=W0107
+2026-11-02 07:59:02.795 | INFO  | TEST-CHA     | T-CHA | STEP_END step=PUMP sub=W0107
+2026-11-02 07:59:03.345 | INFO  | TEST-CHA     | T-CHA | STEP_START step=PROCESS sub=W0107 rf_set=250 gas_set=40
+2026-11-02 07:59:03.889 | INFO  | TEST-CHC     | T-CHC | TEL pressure=767.0 temp=25.8 sub=W0106
+2026-11-02 07:59:05.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.090 pump_rpm=5913
+2026-11-02 07:59:05.301 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.053 temp=24.1 gas=198.9 sub=W0105
+2026-11-02 07:59:05.301 | INFO  | TEST-CHB     | T-CHB | STEP_END step=PURGE sub=W0105
+2026-11-02 07:59:05.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=9.9 temp_c=19.1
+2026-11-02 07:59:06.190 | INFO  | TEST-CHB     | T-CHB | STEP_START step=VENT sub=W0105 pressure_set=760
+2026-11-02 07:59:06.345 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.054 temp=25.2 rf_fwd=252 rf_ref=3.8 gas=39.8 sub=W0107
+2026-11-02 07:59:06.889 | INFO  | TEST-CHC     | T-CHC | TEL pressure=747.4 temp=26.7 sub=W0106
+2026-11-02 07:59:09.190 | INFO  | TEST-CHB     | T-CHB | TEL pressure=774.2 temp=25.6 sub=W0105
+2026-11-02 07:59:09.345 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.049 temp=27.6 rf_fwd=252 rf_ref=2.2 gas=40.2 sub=W0107
+2026-11-02 07:59:09.889 | INFO  | TEST-CHC     | T-CHC | TEL pressure=772.5 temp=25.2 sub=W0106
+2026-11-02 07:59:09.889 | INFO  | TEST-CHC     | T-CHC | STEP_END step=VENT sub=W0106
+2026-11-02 07:59:10.697 | INFO  | TEST-CHC     | T-CHC | RECIPE_END recipe=TEST-RCP-2 sub=W0106 result=OK
+2026-11-02 07:59:11.948 | INFO  | TEST-CHC     | T-CHC | DOOR state=OPEN sub=W0106
+2026-11-02 07:59:11.948 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-CHC dst=TEST-LP1 sub=W0106
+2026-11-02 07:59:12.190 | INFO  | TEST-CHB     | T-CHB | TEL pressure=751.5 temp=25.6 sub=W0105
+2026-11-02 07:59:12.345 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.050 temp=25.9 rf_fwd=252 rf_ref=4.0 gas=38.8 sub=W0107
+2026-11-02 07:59:14.301 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-CHC sub=W0106 vacuum=OK
+2026-11-02 07:59:15.190 | INFO  | TEST-CHB     | T-CHB | TEL pressure=762.9 temp=25.2 sub=W0105
+2026-11-02 07:59:15.345 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.046 temp=27.0 rf_fwd=248 rf_ref=2.6 gas=40.6 sub=W0107
+2026-11-02 07:59:18.190 | INFO  | TEST-CHB     | T-CHB | TEL pressure=749.2 temp=24.8 sub=W0105
+2026-11-02 07:59:18.190 | INFO  | TEST-CHB     | T-CHB | STEP_END step=VENT sub=W0105
+2026-11-02 07:59:18.345 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.050 temp=26.3 rf_fwd=253 rf_ref=3.8 gas=40.1 sub=W0107
+2026-11-02 07:59:18.522 | INFO  | TEST-CHB     | T-CHB | RECIPE_END recipe=TEST-RCP-2 sub=W0105 result=OK
+2026-11-02 07:59:19.579 | INFO  | TEST-CHB     | T-CHB | DOOR state=OPEN sub=W0105
+2026-11-02 07:59:20.009 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-LP1 sub=W0106
+2026-11-02 07:59:21.081 | INFO  | TEST-SCHED   | T-SCHED | SUB_DONE sub=W0106 chamber=C
+2026-11-02 07:59:21.345 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.052 temp=25.4 rf_fwd=247 rf_ref=4.9 gas=40.3 sub=W0107
+2026-11-02 07:59:22.214 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-CHB dst=TEST-LP1 sub=W0105
+2026-11-02 07:59:24.345 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.051 temp=25.7 rf_fwd=247 rf_ref=3.7 gas=39.2 sub=W0107
+2026-11-02 07:59:24.954 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-CHB sub=W0105 vacuum=OK
+2026-11-02 07:59:27.345 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.055 temp=25.6 rf_fwd=247 rf_ref=2.6 gas=39.6 sub=W0107
+2026-11-02 07:59:30.219 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-LP1 sub=W0105
+2026-11-02 07:59:30.345 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.049 temp=26.8 rf_fwd=247 rf_ref=4.1 gas=39.8 sub=W0107
+2026-11-02 07:59:31.147 | INFO  | TEST-SCHED   | T-SCHED | SUB_DONE sub=W0105 chamber=B
+2026-11-02 07:59:32.503 | INFO  | TEST-SCHED   | T-SCHED | DISPATCH sub=W0108 chamber=B
+2026-11-02 07:59:32.703 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-LP1 dst=TEST-ALIGNER sub=W0108
+2026-11-02 07:59:33.345 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.052 temp=24.0 rf_fwd=248 rf_ref=2.2 gas=41.0 sub=W0107
+2026-11-02 07:59:35.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.100 pump_rpm=5912
+2026-11-02 07:59:35.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=10.3 temp_c=20.6
+2026-11-02 07:59:36.345 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.054 temp=27.6 rf_fwd=249 rf_ref=2.7 gas=39.8 sub=W0107
+2026-11-02 07:59:36.426 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-LP1 sub=W0108 vacuum=OK
+2026-11-02 07:59:39.345 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.049 temp=25.2 rf_fwd=247 rf_ref=5.3 gas=39.1 sub=W0107
+2026-11-02 07:59:41.237 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-ALIGNER sub=W0108
+2026-11-02 07:59:42.140 | INFO  | TEST-ALIGNER | T-ALIGN | ALIGN_START sub=W0108
+2026-11-02 07:59:42.345 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.049 temp=25.0 rf_fwd=249 rf_ref=4.2 gas=39.3 sub=W0107
+2026-11-02 07:59:45.345 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.050 temp=27.2 rf_fwd=252 rf_ref=2.4 gas=39.2 sub=W0107
+2026-11-02 07:59:45.345 | INFO  | TEST-CHA     | T-CHA | STEP_END step=PROCESS sub=W0107
+2026-11-02 07:59:46.294 | INFO  | TEST-CHA     | T-CHA | STEP_START step=PROCESS2 sub=W0107 rf_set=450 gas_set=80
+2026-11-02 07:59:46.310 | INFO  | TEST-ALIGNER | T-ALIGN | ALIGN_DONE sub=W0108 offset_deg=0.04
+2026-11-02 07:59:46.610 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-ALIGNER dst=TEST-CHB sub=W0108
+2026-11-02 07:59:48.690 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-ALIGNER sub=W0108 vacuum=OK
+2026-11-02 07:59:49.294 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.051 temp=24.3 rf_fwd=447 rf_ref=4.5 gas=79.7 sub=W0107
+2026-11-02 07:59:52.294 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.048 temp=26.3 rf_fwd=449 rf_ref=5.3 gas=80.5 sub=W0107
+2026-11-02 07:59:53.236 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-CHB sub=W0108
+2026-11-02 07:59:54.426 | INFO  | TEST-CHB     | T-CHB | DOOR state=CLOSED sub=W0108
+2026-11-02 07:59:55.128 | INFO  | TEST-CHB     | T-CHB | RECIPE_START recipe=TEST-RCP-2 sub=W0108
+2026-11-02 07:59:55.128 | INFO  | TEST-CHB     | T-CHB | STEP_START step=PUMP sub=W0108 pressure_set=0.05
+2026-11-02 07:59:55.294 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.049 temp=27.3 rf_fwd=449 rf_ref=5.0 gas=79.5 sub=W0107
+2026-11-02 07:59:56.044 | INFO  | TEST-SCHED   | T-SCHED | DISPATCH sub=W0109 chamber=C
+2026-11-02 07:59:56.244 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-LP1 dst=TEST-ALIGNER sub=W0109
+2026-11-02 07:59:58.128 | INFO  | TEST-CHB     | T-CHB | TEL pressure=190.000 temp=26.1 sub=W0108
+2026-11-02 07:59:58.294 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.053 temp=27.0 rf_fwd=448 rf_ref=2.1 gas=78.9 sub=W0107
+2026-11-02 07:59:59.350 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-LP1 sub=W0109 vacuum=OK
+2026-11-02 08:00:01.128 | INFO  | TEST-CHB     | T-CHB | TEL pressure=47.500 temp=25.0 sub=W0108
+2026-11-02 08:00:01.294 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.047 temp=26.4 rf_fwd=449 rf_ref=4.7 gas=79.8 sub=W0107
+2026-11-02 08:00:02.738 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-ALIGNER sub=W0109
+2026-11-02 08:00:04.128 | INFO  | TEST-CHB     | T-CHB | TEL pressure=11.875 temp=26.6 sub=W0108
+2026-11-02 08:00:04.151 | INFO  | TEST-ALIGNER | T-ALIGN | ALIGN_START sub=W0109
+2026-11-02 08:00:04.294 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.053 temp=25.9 rf_fwd=452 rf_ref=4.2 gas=79.4 sub=W0107
+2026-11-02 08:00:05.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.090 pump_rpm=6083
+2026-11-02 08:00:05.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=9.9 temp_c=19.3
+2026-11-02 08:00:07.128 | INFO  | TEST-CHB     | T-CHB | TEL pressure=2.969 temp=24.5 sub=W0108
+2026-11-02 08:00:07.294 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.048 temp=27.6 rf_fwd=447 rf_ref=3.4 gas=79.5 sub=W0107
+2026-11-02 08:00:08.854 | INFO  | TEST-ALIGNER | T-ALIGN | ALIGN_DONE sub=W0109 offset_deg=0.10
+2026-11-02 08:00:09.154 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-ALIGNER dst=TEST-CHC sub=W0109
+2026-11-02 08:00:10.128 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.742 temp=26.1 sub=W0108
+2026-11-02 08:00:10.294 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.054 temp=24.3 rf_fwd=448 rf_ref=2.6 gas=79.7 sub=W0107
+2026-11-02 08:00:11.535 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-ALIGNER sub=W0109 vacuum=OK
+2026-11-02 08:00:13.128 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.186 temp=24.6 sub=W0108
+2026-11-02 08:00:13.294 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.052 temp=24.7 rf_fwd=448 rf_ref=5.4 gas=79.5 sub=W0107
+2026-11-02 08:00:15.998 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-CHC sub=W0109
+2026-11-02 08:00:16.128 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=25.3 sub=W0108
+2026-11-02 08:00:16.128 | INFO  | TEST-CHB     | T-CHB | STEP_END step=PUMP sub=W0108
+2026-11-02 08:00:16.294 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.051 temp=26.5 rf_fwd=452 rf_ref=5.7 gas=81.2 sub=W0107
+2026-11-02 08:00:16.908 | INFO  | TEST-CHB     | T-CHB | STEP_START step=PROCESS sub=W0108 rf_set=250 gas_set=40
+2026-11-02 08:00:17.456 | INFO  | TEST-CHC     | T-CHC | DOOR state=CLOSED sub=W0109
+2026-11-02 08:00:17.974 | INFO  | TEST-CHC     | T-CHC | RECIPE_START recipe=TEST-RCP-2 sub=W0109
+2026-11-02 08:00:17.974 | INFO  | TEST-CHC     | T-CHC | STEP_START step=PUMP sub=W0109 pressure_set=0.05
+2026-11-02 08:00:19.294 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.052 temp=24.1 rf_fwd=451 rf_ref=3.2 gas=79.7 sub=W0107
+2026-11-02 08:00:19.908 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.048 temp=25.5 rf_fwd=252 rf_ref=4.8 gas=40.1 sub=W0108
+2026-11-02 08:00:20.974 | INFO  | TEST-CHC     | T-CHC | TEL pressure=190.000 temp=24.8 sub=W0109
+2026-11-02 08:00:22.294 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.045 temp=25.5 rf_fwd=448 rf_ref=2.3 gas=79.4 sub=W0107
+2026-11-02 08:00:22.908 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.049 temp=27.2 rf_fwd=248 rf_ref=4.6 gas=39.3 sub=W0108
+2026-11-02 08:00:23.974 | INFO  | TEST-CHC     | T-CHC | TEL pressure=47.500 temp=24.1 sub=W0109
+2026-11-02 08:00:25.294 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.045 temp=25.1 rf_fwd=447 rf_ref=2.9 gas=79.3 sub=W0107
+2026-11-02 08:00:25.908 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=24.0 rf_fwd=250 rf_ref=5.1 gas=40.7 sub=W0108
+2026-11-02 08:00:26.974 | INFO  | TEST-CHC     | T-CHC | TEL pressure=11.875 temp=25.9 sub=W0109
+2026-11-02 08:00:28.294 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.050 temp=24.5 rf_fwd=452 rf_ref=4.5 gas=78.9 sub=W0107
+2026-11-02 08:00:28.908 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.053 temp=26.9 rf_fwd=251 rf_ref=5.9 gas=41.0 sub=W0108
+2026-11-02 08:00:29.974 | INFO  | TEST-CHC     | T-CHC | TEL pressure=2.969 temp=25.4 sub=W0109
+2026-11-02 08:00:31.294 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.047 temp=25.9 rf_fwd=453 rf_ref=4.9 gas=80.7 sub=W0107
+2026-11-02 08:00:31.908 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.047 temp=25.6 rf_fwd=247 rf_ref=2.7 gas=39.5 sub=W0108
+2026-11-02 08:00:32.974 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.742 temp=26.4 sub=W0109
+2026-11-02 08:00:34.294 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.053 temp=25.9 rf_fwd=451 rf_ref=3.7 gas=80.0 sub=W0107
+2026-11-02 08:00:34.908 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.049 temp=27.1 rf_fwd=252 rf_ref=2.8 gas=41.1 sub=W0108
+2026-11-02 08:00:35.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.099 pump_rpm=5909
+2026-11-02 08:00:35.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=10.5 temp_c=19.2
+2026-11-02 08:00:35.974 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.186 temp=27.8 sub=W0109
+2026-11-02 08:00:37.294 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.055 temp=26.4 rf_fwd=451 rf_ref=2.3 gas=80.1 sub=W0107
+2026-11-02 08:00:37.908 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=24.1 rf_fwd=251 rf_ref=2.3 gas=40.9 sub=W0108
+2026-11-02 08:00:38.974 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.046 temp=25.8 sub=W0109
+2026-11-02 08:00:40.294 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.050 temp=24.8 rf_fwd=450 rf_ref=3.1 gas=79.6 sub=W0107
+2026-11-02 08:00:40.908 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.052 temp=24.1 rf_fwd=253 rf_ref=3.8 gas=39.6 sub=W0108
+2026-11-02 08:00:41.974 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.040 temp=25.2 sub=W0109
+2026-11-02 08:00:41.974 | INFO  | TEST-CHC     | T-CHC | STEP_END step=PUMP sub=W0109
+2026-11-02 08:00:42.528 | INFO  | TEST-CHC     | T-CHC | STEP_START step=PROCESS sub=W0109 rf_set=250 gas_set=40
+2026-11-02 08:00:43.294 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.047 temp=25.7 rf_fwd=449 rf_ref=5.3 gas=78.8 sub=W0107
+2026-11-02 08:00:43.294 | INFO  | TEST-CHA     | T-CHA | STEP_END step=PROCESS2 sub=W0107
+2026-11-02 08:00:43.688 | INFO  | TEST-CHA     | T-CHA | STEP_START step=PURGE sub=W0107 gas_set=200
+2026-11-02 08:00:43.908 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.047 temp=24.9 rf_fwd=252 rf_ref=5.8 gas=39.8 sub=W0108
+2026-11-02 08:00:45.528 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.048 temp=27.9 rf_fwd=248 rf_ref=2.1 gas=39.0 sub=W0109
+2026-11-02 08:00:46.688 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.048 temp=24.5 gas=200.9 sub=W0107
+2026-11-02 08:00:46.908 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.051 temp=27.7 rf_fwd=251 rf_ref=5.6 gas=39.7 sub=W0108
+2026-11-02 08:00:48.528 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.047 temp=24.5 rf_fwd=252 rf_ref=3.0 gas=40.2 sub=W0109
+2026-11-02 08:00:49.688 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.052 temp=27.4 gas=199.8 sub=W0107
+2026-11-02 08:00:49.908 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=26.4 rf_fwd=252 rf_ref=4.4 gas=39.7 sub=W0108
+2026-11-02 08:00:51.528 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.050 temp=27.6 rf_fwd=251 rf_ref=2.1 gas=39.1 sub=W0109
+2026-11-02 08:00:52.688 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.050 temp=24.5 gas=199.2 sub=W0107
+2026-11-02 08:00:52.908 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.053 temp=27.3 rf_fwd=253 rf_ref=4.2 gas=40.7 sub=W0108
+2026-11-02 08:00:54.528 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.045 temp=25.9 rf_fwd=252 rf_ref=4.7 gas=40.4 sub=W0109
+2026-11-02 08:00:55.688 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.049 temp=25.3 gas=200.8 sub=W0107
+2026-11-02 08:00:55.908 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.053 temp=27.9 rf_fwd=252 rf_ref=4.0 gas=40.6 sub=W0108
+2026-11-02 08:00:57.528 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.050 temp=27.1 rf_fwd=251 rf_ref=4.3 gas=40.7 sub=W0109
+2026-11-02 08:00:58.688 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.046 temp=27.5 gas=200.9 sub=W0107
+2026-11-02 08:00:58.688 | INFO  | TEST-CHA     | T-CHA | STEP_END step=PURGE sub=W0107
+2026-11-02 08:00:58.908 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.050 temp=24.1 rf_fwd=252 rf_ref=5.4 gas=40.5 sub=W0108
+2026-11-02 08:00:59.210 | INFO  | TEST-CHA     | T-CHA | STEP_START step=VENT sub=W0107 pressure_set=760
+2026-11-02 08:01:00.528 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.054 temp=26.4 rf_fwd=253 rf_ref=4.5 gas=40.0 sub=W0109
+2026-11-02 08:01:01.908 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.051 temp=26.1 rf_fwd=249 rf_ref=4.2 gas=39.9 sub=W0108
+2026-11-02 08:01:02.210 | INFO  | TEST-CHA     | T-CHA | TEL pressure=745.3 temp=27.9 sub=W0107
+2026-11-02 08:01:03.528 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.049 temp=24.7 rf_fwd=251 rf_ref=5.9 gas=40.0 sub=W0109
+2026-11-02 08:01:04.908 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.055 temp=27.3 rf_fwd=253 rf_ref=4.8 gas=40.5 sub=W0108
+2026-11-02 08:01:05.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.088 pump_rpm=6075
+2026-11-02 08:01:05.210 | INFO  | TEST-CHA     | T-CHA | TEL pressure=764.3 temp=27.4 sub=W0107
+2026-11-02 08:01:05.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=10.3 temp_c=19.6
+2026-11-02 08:01:06.528 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.047 temp=24.3 rf_fwd=251 rf_ref=4.3 gas=41.2 sub=W0109
+2026-11-02 08:01:07.908 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.049 temp=25.1 rf_fwd=249 rf_ref=5.7 gas=40.0 sub=W0108
+2026-11-02 08:01:08.210 | INFO  | TEST-CHA     | T-CHA | TEL pressure=752.4 temp=25.7 sub=W0107
+2026-11-02 08:01:09.528 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.046 temp=26.2 rf_fwd=250 rf_ref=2.4 gas=40.6 sub=W0109
+2026-11-02 08:01:10.908 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.047 temp=27.3 rf_fwd=247 rf_ref=5.5 gas=40.5 sub=W0108
+2026-11-02 08:01:11.210 | INFO  | TEST-CHA     | T-CHA | TEL pressure=772.6 temp=27.5 sub=W0107
+2026-11-02 08:01:11.210 | INFO  | TEST-CHA     | T-CHA | STEP_END step=VENT sub=W0107
+2026-11-02 08:01:12.005 | INFO  | TEST-CHA     | T-CHA | RECIPE_END recipe=TEST-RCP-2 sub=W0107 result=OK
+2026-11-02 08:01:12.524 | INFO  | TEST-CHA     | T-CHA | DOOR state=OPEN sub=W0107
+2026-11-02 08:01:12.524 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-CHA dst=TEST-LP1 sub=W0107
+2026-11-02 08:01:12.528 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.049 temp=27.1 rf_fwd=248 rf_ref=3.2 gas=39.5 sub=W0109
+2026-11-02 08:01:13.908 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.048 temp=25.6 rf_fwd=251 rf_ref=2.9 gas=39.6 sub=W0108
+2026-11-02 08:01:13.908 | INFO  | TEST-CHB     | T-CHB | STEP_END step=PROCESS sub=W0108
+2026-11-02 08:01:14.613 | INFO  | TEST-CHB     | T-CHB | STEP_START step=PROCESS2 sub=W0108 rf_set=450 gas_set=80
+2026-11-02 08:01:15.528 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.049 temp=25.6 rf_fwd=248 rf_ref=3.3 gas=39.9 sub=W0109
+2026-11-02 08:01:16.357 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-CHA sub=W0107 vacuum=OK
+2026-11-02 08:01:17.613 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.054 temp=25.5 rf_fwd=451 rf_ref=4.8 gas=80.4 sub=W0108
+2026-11-02 08:01:18.528 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.050 temp=26.6 rf_fwd=250 rf_ref=4.6 gas=39.7 sub=W0109
+2026-11-02 08:01:20.613 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.047 temp=24.4 rf_fwd=449 rf_ref=4.2 gas=79.2 sub=W0108
+2026-11-02 08:01:21.528 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.047 temp=24.7 rf_fwd=252 rf_ref=5.2 gas=39.1 sub=W0109
+2026-11-02 08:01:21.722 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-LP1 sub=W0107
+2026-11-02 08:01:22.483 | INFO  | TEST-SCHED   | T-SCHED | SUB_DONE sub=W0107 chamber=A
+2026-11-02 08:01:23.613 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.047 temp=25.6 rf_fwd=449 rf_ref=4.7 gas=80.3 sub=W0108
+2026-11-02 08:01:24.174 | INFO  | TEST-SCHED   | T-SCHED | DISPATCH sub=W0110 chamber=A
+2026-11-02 08:01:24.374 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-LP1 dst=TEST-ALIGNER sub=W0110
+2026-11-02 08:01:24.528 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.050 temp=24.5 rf_fwd=252 rf_ref=2.5 gas=40.7 sub=W0109
+2026-11-02 08:01:26.613 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.052 temp=25.8 rf_fwd=448 rf_ref=3.2 gas=81.0 sub=W0108
+2026-11-02 08:01:27.120 | WARN  | TEST-ROBOT   | T-ROBOT | GRIP_RETRY station=TEST-LP1 sub=W0110 retry=1
+2026-11-02 08:01:27.528 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.046 temp=26.7 rf_fwd=247 rf_ref=3.3 gas=38.9 sub=W0109
+2026-11-02 08:01:28.693 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-LP1 sub=W0110 vacuum=OK
+2026-11-02 08:01:29.613 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.045 temp=26.0 rf_fwd=449 rf_ref=3.4 gas=79.9 sub=W0108
+2026-11-02 08:01:30.528 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.045 temp=25.5 rf_fwd=250 rf_ref=5.5 gas=40.2 sub=W0109
+2026-11-02 08:01:32.613 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.051 temp=26.1 rf_fwd=448 rf_ref=2.6 gas=79.6 sub=W0108
+2026-11-02 08:01:33.528 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.045 temp=25.6 rf_fwd=250 rf_ref=2.7 gas=39.0 sub=W0109
+2026-11-02 08:01:33.666 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-ALIGNER sub=W0110
+2026-11-02 08:01:34.788 | INFO  | TEST-ALIGNER | T-ALIGN | ALIGN_START sub=W0110
+2026-11-02 08:01:35.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.088 pump_rpm=6044
+2026-11-02 08:01:35.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=10.0 temp_c=18.3
+2026-11-02 08:01:35.613 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.051 temp=24.0 rf_fwd=448 rf_ref=3.0 gas=79.6 sub=W0108
+2026-11-02 08:01:36.528 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.046 temp=26.3 rf_fwd=251 rf_ref=5.6 gas=38.8 sub=W0109
+2026-11-02 08:01:38.613 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.052 temp=26.8 rf_fwd=450 rf_ref=4.8 gas=80.8 sub=W0108
+2026-11-02 08:01:39.528 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.050 temp=25.4 rf_fwd=252 rf_ref=4.1 gas=39.8 sub=W0109
+2026-11-02 08:01:40.526 | INFO  | TEST-ALIGNER | T-ALIGN | ALIGN_DONE sub=W0110 offset_deg=0.25
+2026-11-02 08:01:40.826 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-ALIGNER dst=TEST-CHA sub=W0110
+2026-11-02 08:01:41.613 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.049 temp=26.7 rf_fwd=452 rf_ref=5.2 gas=80.7 sub=W0108
+2026-11-02 08:01:42.528 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.051 temp=24.6 rf_fwd=249 rf_ref=4.7 gas=40.5 sub=W0109
+2026-11-02 08:01:43.923 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-ALIGNER sub=W0110 vacuum=OK
+2026-11-02 08:01:44.613 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.047 temp=25.5 rf_fwd=448 rf_ref=2.7 gas=78.8 sub=W0108
+2026-11-02 08:01:45.528 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.049 temp=26.2 rf_fwd=250 rf_ref=2.8 gas=40.4 sub=W0109
+2026-11-02 08:01:47.613 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=25.7 rf_fwd=447 rf_ref=2.8 gas=79.1 sub=W0108
+2026-11-02 08:01:48.521 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-CHA sub=W0110
+2026-11-02 08:01:48.528 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.047 temp=24.1 rf_fwd=248 rf_ref=5.7 gas=39.7 sub=W0109
+2026-11-02 08:01:48.528 | INFO  | TEST-CHC     | T-CHC | STEP_END step=PROCESS sub=W0109
+2026-11-02 08:01:49.020 | INFO  | TEST-CHC     | T-CHC | STEP_START step=PROCESS2 sub=W0109 rf_set=450 gas_set=80
+2026-11-02 08:01:50.001 | INFO  | TEST-CHA     | T-CHA | DOOR state=CLOSED sub=W0110
+2026-11-02 08:01:50.613 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.051 temp=27.9 rf_fwd=451 rf_ref=5.7 gas=81.1 sub=W0108
+2026-11-02 08:01:51.112 | INFO  | TEST-CHA     | T-CHA | RECIPE_START recipe=TEST-RCP-2 sub=W0110
+2026-11-02 08:01:51.112 | INFO  | TEST-CHA     | T-CHA | STEP_START step=PUMP sub=W0110 pressure_set=0.05
+2026-11-02 08:01:52.020 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.052 temp=25.5 rf_fwd=453 rf_ref=4.0 gas=80.1 sub=W0109
+2026-11-02 08:01:53.613 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.051 temp=26.4 rf_fwd=452 rf_ref=4.2 gas=79.6 sub=W0108
+2026-11-02 08:01:54.112 | INFO  | TEST-CHA     | T-CHA | TEL pressure=190.000 temp=25.4 sub=W0110
+2026-11-02 08:01:55.020 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.050 temp=26.2 rf_fwd=450 rf_ref=2.7 gas=79.5 sub=W0109
+2026-11-02 08:01:56.613 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=25.6 rf_fwd=451 rf_ref=4.9 gas=80.6 sub=W0108
+2026-11-02 08:01:57.112 | INFO  | TEST-CHA     | T-CHA | TEL pressure=47.500 temp=24.1 sub=W0110
+2026-11-02 08:01:58.020 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.054 temp=24.7 rf_fwd=451 rf_ref=3.5 gas=79.0 sub=W0109
+2026-11-02 08:01:59.613 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=27.2 rf_fwd=447 rf_ref=2.6 gas=79.9 sub=W0108
+2026-11-02 08:01:59.613 | INFO  | TEST-CHB     | T-CHB | STEP_END step=PROCESS2 sub=W0108
+2026-11-02 08:02:00.112 | INFO  | TEST-CHA     | T-CHA | TEL pressure=11.875 temp=25.2 sub=W0110
+2026-11-02 08:02:00.391 | INFO  | TEST-CHB     | T-CHB | STEP_START step=PURGE sub=W0108 gas_set=200
+2026-11-02 08:02:01.020 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.049 temp=27.7 rf_fwd=452 rf_ref=2.7 gas=79.9 sub=W0109
+2026-11-02 08:02:03.112 | INFO  | TEST-CHA     | T-CHA | TEL pressure=2.969 temp=24.7 sub=W0110
+2026-11-02 08:02:03.391 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.054 temp=26.8 gas=199.7 sub=W0108
+2026-11-02 08:02:04.020 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.054 temp=27.1 rf_fwd=449 rf_ref=5.1 gas=80.6 sub=W0109
+2026-11-02 08:02:05.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.081 pump_rpm=5911
+2026-11-02 08:02:05.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=10.2 temp_c=20.5
+2026-11-02 08:02:06.112 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.742 temp=25.3 sub=W0110
+2026-11-02 08:02:06.391 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.047 temp=26.9 gas=200.5 sub=W0108
+2026-11-02 08:02:07.020 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.047 temp=26.9 rf_fwd=449 rf_ref=4.7 gas=79.8 sub=W0109
+2026-11-02 08:02:09.112 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.186 temp=24.8 sub=W0110
+2026-11-02 08:02:09.391 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.049 temp=25.9 gas=199.3 sub=W0108
+2026-11-02 08:02:10.020 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.054 temp=25.8 rf_fwd=450 rf_ref=4.2 gas=79.8 sub=W0109
+2026-11-02 08:02:12.112 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.046 temp=24.8 sub=W0110
+2026-11-02 08:02:12.391 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.052 temp=27.5 gas=200.4 sub=W0108
+2026-11-02 08:02:13.020 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.052 temp=27.2 rf_fwd=452 rf_ref=4.6 gas=79.5 sub=W0109
+2026-11-02 08:02:15.112 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.040 temp=24.5 sub=W0110
+2026-11-02 08:02:15.112 | INFO  | TEST-CHA     | T-CHA | STEP_END step=PUMP sub=W0110
+2026-11-02 08:02:15.391 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=27.6 gas=199.2 sub=W0108
+2026-11-02 08:02:15.391 | INFO  | TEST-CHB     | T-CHB | STEP_END step=PURGE sub=W0108
+2026-11-02 08:02:15.852 | INFO  | TEST-CHA     | T-CHA | STEP_START step=PROCESS sub=W0110 rf_set=250 gas_set=40
+2026-11-02 08:02:16.020 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.054 temp=25.2 rf_fwd=452 rf_ref=3.1 gas=79.6 sub=W0109
+2026-11-02 08:02:16.200 | INFO  | TEST-CHB     | T-CHB | STEP_START step=VENT sub=W0108 pressure_set=760
+2026-11-02 08:02:18.852 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.048 temp=26.9 rf_fwd=250 rf_ref=4.8 gas=39.7 sub=W0110
+2026-11-02 08:02:19.020 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.049 temp=24.9 rf_fwd=450 rf_ref=2.9 gas=80.7 sub=W0109
+2026-11-02 08:02:19.200 | INFO  | TEST-CHB     | T-CHB | TEL pressure=745.3 temp=24.2 sub=W0108
+2026-11-02 08:02:21.852 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.050 temp=27.9 rf_fwd=250 rf_ref=3.9 gas=40.4 sub=W0110
+2026-11-02 08:02:22.020 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.052 temp=24.2 rf_fwd=453 rf_ref=5.0 gas=79.5 sub=W0109
+2026-11-02 08:02:22.200 | INFO  | TEST-CHB     | T-CHB | TEL pressure=755.5 temp=25.4 sub=W0108
+2026-11-02 08:02:24.852 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.049 temp=27.9 rf_fwd=251 rf_ref=4.2 gas=39.3 sub=W0110
+2026-11-02 08:02:25.020 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.046 temp=26.6 rf_fwd=448 rf_ref=2.9 gas=79.4 sub=W0109
+2026-11-02 08:02:25.200 | INFO  | TEST-CHB     | T-CHB | TEL pressure=764.4 temp=26.7 sub=W0108
+2026-11-02 08:02:27.852 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.050 temp=25.2 rf_fwd=248 rf_ref=6.0 gas=39.2 sub=W0110
+2026-11-02 08:02:28.020 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.046 temp=26.3 rf_fwd=450 rf_ref=2.5 gas=79.0 sub=W0109
+2026-11-02 08:02:28.200 | INFO  | TEST-CHB     | T-CHB | TEL pressure=745.7 temp=24.6 sub=W0108
+2026-11-02 08:02:28.200 | INFO  | TEST-CHB     | T-CHB | STEP_END step=VENT sub=W0108
+2026-11-02 08:02:28.658 | INFO  | TEST-CHB     | T-CHB | RECIPE_END recipe=TEST-RCP-2 sub=W0108 result=OK
+2026-11-02 08:02:29.528 | INFO  | TEST-CHB     | T-CHB | DOOR state=OPEN sub=W0108
+2026-11-02 08:02:29.528 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-CHB dst=TEST-LP1 sub=W0108
+2026-11-02 08:02:30.852 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.054 temp=27.9 rf_fwd=248 rf_ref=3.5 gas=40.0 sub=W0110
+2026-11-02 08:02:31.020 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.051 temp=24.6 rf_fwd=450 rf_ref=2.1 gas=80.1 sub=W0109
+2026-11-02 08:02:31.721 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-CHB sub=W0108 vacuum=OK
+2026-11-02 08:02:33.852 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.055 temp=25.6 rf_fwd=251 rf_ref=5.3 gas=39.5 sub=W0110
+2026-11-02 08:02:34.020 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.048 temp=24.0 rf_fwd=452 rf_ref=3.2 gas=78.8 sub=W0109
+2026-11-02 08:02:35.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.111 pump_rpm=5987
+2026-11-02 08:02:35.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=10.3 temp_c=19.8
+2026-11-02 08:02:36.852 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.054 temp=26.9 rf_fwd=248 rf_ref=4.4 gas=39.4 sub=W0110
+2026-11-02 08:02:37.019 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-LP1 sub=W0108
+2026-11-02 08:02:37.020 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.053 temp=27.4 rf_fwd=451 rf_ref=5.6 gas=80.5 sub=W0109
+2026-11-02 08:02:37.020 | INFO  | TEST-CHC     | T-CHC | STEP_END step=PROCESS2 sub=W0109
+2026-11-02 08:02:37.491 | INFO  | TEST-CHC     | T-CHC | STEP_START step=PURGE sub=W0109 gas_set=200
+2026-11-02 08:02:37.678 | INFO  | TEST-SCHED   | T-SCHED | SUB_DONE sub=W0108 chamber=B
+2026-11-02 08:02:38.501 | INFO  | TEST-SCHED   | T-SCHED | DISPATCH sub=W0111 chamber=B
+2026-11-02 08:02:38.701 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-LP1 dst=TEST-ALIGNER sub=W0111
+2026-11-02 08:02:39.852 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.045 temp=26.8 rf_fwd=253 rf_ref=5.6 gas=40.3 sub=W0110
+2026-11-02 08:02:40.491 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.054 temp=27.9 gas=201.0 sub=W0109
+2026-11-02 08:02:41.241 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-LP1 sub=W0111 vacuum=OK
+2026-11-02 08:02:42.852 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.047 temp=24.0 rf_fwd=248 rf_ref=2.9 gas=39.9 sub=W0110
+2026-11-02 08:02:43.491 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.048 temp=24.3 gas=199.9 sub=W0109
+2026-11-02 08:02:45.852 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.049 temp=26.5 rf_fwd=252 rf_ref=2.2 gas=38.9 sub=W0110
+2026-11-02 08:02:46.491 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.048 temp=24.8 gas=199.7 sub=W0109
+2026-11-02 08:02:46.542 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-ALIGNER sub=W0111
+2026-11-02 08:02:47.821 | INFO  | TEST-ALIGNER | T-ALIGN | ALIGN_START sub=W0111
+2026-11-02 08:02:48.852 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.045 temp=24.0 rf_fwd=248 rf_ref=5.0 gas=39.5 sub=W0110
+2026-11-02 08:02:49.491 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.050 temp=24.1 gas=199.5 sub=W0109
+2026-11-02 08:02:51.852 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.053 temp=27.0 rf_fwd=251 rf_ref=2.4 gas=40.8 sub=W0110
+2026-11-02 08:02:52.491 | INFO  | TEST-CHC     | T-CHC | TEL pressure=0.054 temp=25.5 gas=199.9 sub=W0109
+2026-11-02 08:02:52.491 | INFO  | TEST-CHC     | T-CHC | STEP_END step=PURGE sub=W0109
+2026-11-02 08:02:52.983 | INFO  | TEST-CHC     | T-CHC | STEP_START step=VENT sub=W0109 pressure_set=760
+2026-11-02 08:02:53.152 | INFO  | TEST-ALIGNER | T-ALIGN | ALIGN_DONE sub=W0111 offset_deg=-0.05
+2026-11-02 08:02:53.452 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-ALIGNER dst=TEST-CHB sub=W0111
+2026-11-02 08:02:54.852 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.048 temp=24.2 rf_fwd=253 rf_ref=3.7 gas=40.7 sub=W0110
+2026-11-02 08:02:55.983 | INFO  | TEST-CHC     | T-CHC | TEL pressure=771.9 temp=26.2 sub=W0109
+2026-11-02 08:02:56.871 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-ALIGNER sub=W0111 vacuum=OK
+2026-11-02 08:02:57.852 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.050 temp=27.9 rf_fwd=250 rf_ref=3.3 gas=40.7 sub=W0110
+2026-11-02 08:02:58.983 | INFO  | TEST-CHC     | T-CHC | TEL pressure=768.4 temp=25.4 sub=W0109
+2026-11-02 08:03:00.852 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.052 temp=24.6 rf_fwd=250 rf_ref=4.3 gas=40.3 sub=W0110
+2026-11-02 08:03:00.898 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-CHB sub=W0111
+2026-11-02 08:03:01.763 | INFO  | TEST-CHB     | T-CHB | DOOR state=CLOSED sub=W0111
+2026-11-02 08:03:01.983 | INFO  | TEST-CHC     | T-CHC | TEL pressure=755.3 temp=27.7 sub=W0109
+2026-11-02 08:03:03.262 | INFO  | TEST-CHB     | T-CHB | RECIPE_START recipe=TEST-RCP-2 sub=W0111
+2026-11-02 08:03:03.262 | INFO  | TEST-CHB     | T-CHB | STEP_START step=PUMP sub=W0111 pressure_set=0.05
+2026-11-02 08:03:03.852 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.053 temp=27.3 rf_fwd=250 rf_ref=5.8 gas=39.9 sub=W0110
+2026-11-02 08:03:04.983 | INFO  | TEST-CHC     | T-CHC | TEL pressure=745.2 temp=27.0 sub=W0109
+2026-11-02 08:03:05.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.095 pump_rpm=5931
+2026-11-02 08:03:05.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=10.4 temp_c=20.5
+2026-11-02 08:03:06.262 | INFO  | TEST-CHB     | T-CHB | TEL pressure=190.000 temp=27.9 sub=W0111
+2026-11-02 08:03:06.852 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.051 temp=26.4 rf_fwd=247 rf_ref=2.8 gas=40.5 sub=W0110
+2026-11-02 08:03:07.983 | INFO  | TEST-CHC     | T-CHC | TEL pressure=746.5 temp=26.1 sub=W0109
+2026-11-02 08:03:07.983 | INFO  | TEST-CHC     | T-CHC | STEP_END step=VENT sub=W0109
+2026-11-02 08:03:08.573 | INFO  | TEST-CHC     | T-CHC | RECIPE_END recipe=TEST-RCP-2 sub=W0109 result=OK
+2026-11-02 08:03:09.262 | INFO  | TEST-CHB     | T-CHB | TEL pressure=47.500 temp=25.8 sub=W0111
+2026-11-02 08:03:09.852 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.054 temp=27.2 rf_fwd=252 rf_ref=2.7 gas=41.0 sub=W0110
+2026-11-02 08:03:10.001 | INFO  | TEST-CHC     | T-CHC | DOOR state=OPEN sub=W0109
+2026-11-02 08:03:10.001 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-CHC dst=TEST-LP1 sub=W0109
+2026-11-02 08:03:12.259 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-CHC sub=W0109 vacuum=OK
+2026-11-02 08:03:12.262 | INFO  | TEST-CHB     | T-CHB | TEL pressure=11.875 temp=24.6 sub=W0111
+2026-11-02 08:03:12.852 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.045 temp=27.0 rf_fwd=252 rf_ref=5.5 gas=39.9 sub=W0110
+2026-11-02 08:03:15.262 | INFO  | TEST-CHB     | T-CHB | TEL pressure=2.969 temp=25.2 sub=W0111
+2026-11-02 08:03:15.852 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.049 temp=24.3 rf_fwd=252 rf_ref=3.5 gas=39.6 sub=W0110
+2026-11-02 08:03:15.852 | INFO  | TEST-CHA     | T-CHA | STEP_END step=PROCESS sub=W0110
+2026-11-02 08:03:16.046 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-LP1 sub=W0109
+2026-11-02 08:03:16.162 | INFO  | TEST-CHA     | T-CHA | STEP_START step=PROCESS2 sub=W0110 rf_set=450 gas_set=80
+2026-11-02 08:03:16.812 | INFO  | TEST-SCHED   | T-SCHED | SUB_DONE sub=W0109 chamber=C
+2026-11-02 08:03:18.262 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.742 temp=24.5 sub=W0111
+2026-11-02 08:03:19.162 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.049 temp=26.0 rf_fwd=448 rf_ref=4.3 gas=79.1 sub=W0110
+2026-11-02 08:03:21.262 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.186 temp=27.1 sub=W0111
+2026-11-02 08:03:22.162 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.046 temp=24.0 rf_fwd=448 rf_ref=3.6 gas=80.4 sub=W0110
+2026-11-02 08:03:24.262 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=24.4 sub=W0111
+2026-11-02 08:03:25.162 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.049 temp=24.1 rf_fwd=451 rf_ref=3.0 gas=79.8 sub=W0110
+2026-11-02 08:03:27.262 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.040 temp=25.9 sub=W0111
+2026-11-02 08:03:27.262 | INFO  | TEST-CHB     | T-CHB | STEP_END step=PUMP sub=W0111
+2026-11-02 08:03:28.015 | INFO  | TEST-CHB     | T-CHB | STEP_START step=PROCESS sub=W0111 rf_set=250 gas_set=40
+2026-11-02 08:03:28.162 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.053 temp=26.3 rf_fwd=450 rf_ref=3.1 gas=79.5 sub=W0110
+2026-11-02 08:03:31.015 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.051 temp=25.0 rf_fwd=251 rf_ref=4.8 gas=39.3 sub=W0111
+2026-11-02 08:03:31.162 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.047 temp=25.2 rf_fwd=448 rf_ref=2.4 gas=80.2 sub=W0110
+2026-11-02 08:03:34.015 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=24.7 rf_fwd=253 rf_ref=4.0 gas=39.4 sub=W0111
+2026-11-02 08:03:34.162 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.050 temp=25.8 rf_fwd=453 rf_ref=4.4 gas=79.1 sub=W0110
+2026-11-02 08:03:35.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.081 pump_rpm=6035
+2026-11-02 08:03:35.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=10.3 temp_c=21.0
+2026-11-02 08:03:37.015 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.053 temp=24.6 rf_fwd=249 rf_ref=4.0 gas=40.8 sub=W0111
+2026-11-02 08:03:37.162 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.048 temp=26.1 rf_fwd=448 rf_ref=3.3 gas=80.4 sub=W0110
+2026-11-02 08:03:40.015 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.050 temp=27.4 rf_fwd=253 rf_ref=4.1 gas=38.9 sub=W0111
+2026-11-02 08:03:40.162 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.046 temp=24.3 rf_fwd=450 rf_ref=4.0 gas=79.1 sub=W0110
+2026-11-02 08:03:43.015 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=24.2 rf_fwd=249 rf_ref=2.6 gas=40.4 sub=W0111
+2026-11-02 08:03:43.162 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.051 temp=26.0 rf_fwd=452 rf_ref=5.3 gas=79.9 sub=W0110
+2026-11-02 08:03:46.015 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.048 temp=27.8 rf_fwd=250 rf_ref=4.7 gas=40.8 sub=W0111
+2026-11-02 08:03:46.162 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.048 temp=26.0 rf_fwd=448 rf_ref=3.7 gas=79.4 sub=W0110
+2026-11-02 08:03:49.015 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.045 temp=24.8 rf_fwd=252 rf_ref=2.5 gas=40.8 sub=W0111
+2026-11-02 08:03:49.162 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.054 temp=26.3 rf_fwd=447 rf_ref=2.1 gas=79.0 sub=W0110
+2026-11-02 08:03:52.015 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.054 temp=27.0 rf_fwd=248 rf_ref=2.6 gas=41.0 sub=W0111
+2026-11-02 08:03:52.162 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.048 temp=26.5 rf_fwd=451 rf_ref=3.3 gas=80.9 sub=W0110
+2026-11-02 08:03:55.015 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.055 temp=25.9 rf_fwd=252 rf_ref=5.9 gas=40.5 sub=W0111
+2026-11-02 08:03:55.162 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.051 temp=24.7 rf_fwd=447 rf_ref=5.1 gas=79.9 sub=W0110
+2026-11-02 08:03:58.015 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.049 temp=26.8 rf_fwd=248 rf_ref=3.2 gas=40.6 sub=W0111
+2026-11-02 08:03:58.162 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.055 temp=24.9 rf_fwd=451 rf_ref=2.5 gas=81.1 sub=W0110
+2026-11-02 08:04:01.015 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=25.2 rf_fwd=248 rf_ref=5.9 gas=39.4 sub=W0111
+2026-11-02 08:04:01.162 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.047 temp=27.1 rf_fwd=448 rf_ref=2.4 gas=79.7 sub=W0110
+2026-11-02 08:04:04.015 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.051 temp=26.2 rf_fwd=251 rf_ref=5.7 gas=39.3 sub=W0111
+2026-11-02 08:04:04.162 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.045 temp=26.4 rf_fwd=449 rf_ref=4.2 gas=79.2 sub=W0110
+2026-11-02 08:04:05.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.119 pump_rpm=6014
+2026-11-02 08:04:05.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=9.5 temp_c=19.1
+2026-11-02 08:04:07.015 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.054 temp=27.3 rf_fwd=251 rf_ref=2.3 gas=39.9 sub=W0111
+2026-11-02 08:04:07.015 | INFO  | TEST-CHB     | T-CHB | STEP_END step=PROCESS sub=W0111
+2026-11-02 08:04:07.162 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.048 temp=26.8 rf_fwd=449 rf_ref=3.7 gas=80.3 sub=W0110
+2026-11-02 08:04:07.976 | INFO  | TEST-CHB     | T-CHB | STEP_START step=PROCESS2 sub=W0111 rf_set=450 gas_set=80
+2026-11-02 08:04:10.162 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.048 temp=24.3 rf_fwd=448 rf_ref=2.7 gas=80.2 sub=W0110
+2026-11-02 08:04:10.976 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.051 temp=25.1 rf_fwd=452 rf_ref=5.7 gas=80.6 sub=W0111
+2026-11-02 08:04:13.162 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.050 temp=27.7 rf_fwd=453 rf_ref=5.2 gas=80.3 sub=W0110
+2026-11-02 08:04:13.162 | INFO  | TEST-CHA     | T-CHA | STEP_END step=PROCESS2 sub=W0110
+2026-11-02 08:04:13.917 | INFO  | TEST-CHA     | T-CHA | STEP_START step=PURGE sub=W0110 gas_set=200
+2026-11-02 08:04:13.976 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.050 temp=24.2 rf_fwd=452 rf_ref=3.5 gas=79.6 sub=W0111
+2026-11-02 08:04:16.917 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.051 temp=27.1 gas=200.9 sub=W0110
+2026-11-02 08:04:16.976 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.049 temp=27.9 rf_fwd=450 rf_ref=4.4 gas=80.2 sub=W0111
+2026-11-02 08:04:19.917 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.055 temp=24.5 gas=199.1 sub=W0110
+2026-11-02 08:04:19.976 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.053 temp=26.4 rf_fwd=451 rf_ref=6.0 gas=79.1 sub=W0111
+2026-11-02 08:04:22.917 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.051 temp=26.6 gas=200.8 sub=W0110
+2026-11-02 08:04:22.976 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.052 temp=24.9 rf_fwd=450 rf_ref=5.3 gas=80.7 sub=W0111
+2026-11-02 08:04:25.917 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.045 temp=27.2 gas=200.5 sub=W0110
+2026-11-02 08:04:25.976 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.045 temp=25.0 rf_fwd=450 rf_ref=3.1 gas=80.7 sub=W0111
+2026-11-02 08:04:28.917 | INFO  | TEST-CHA     | T-CHA | TEL pressure=0.052 temp=24.8 gas=200.1 sub=W0110
+2026-11-02 08:04:28.917 | INFO  | TEST-CHA     | T-CHA | STEP_END step=PURGE sub=W0110
+2026-11-02 08:04:28.976 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.048 temp=27.5 rf_fwd=450 rf_ref=4.4 gas=80.9 sub=W0111
+2026-11-02 08:04:29.505 | INFO  | TEST-CHA     | T-CHA | STEP_START step=VENT sub=W0110 pressure_set=760
+2026-11-02 08:04:31.976 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.051 temp=24.8 rf_fwd=451 rf_ref=3.1 gas=79.0 sub=W0111
+2026-11-02 08:04:32.505 | INFO  | TEST-CHA     | T-CHA | TEL pressure=755.8 temp=27.3 sub=W0110
+2026-11-02 08:04:34.976 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.052 temp=24.7 rf_fwd=452 rf_ref=5.4 gas=80.0 sub=W0111
+2026-11-02 08:04:35.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.112 pump_rpm=5972
+2026-11-02 08:04:35.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=10.3 temp_c=20.3
+2026-11-02 08:04:35.505 | INFO  | TEST-CHA     | T-CHA | TEL pressure=760.3 temp=26.4 sub=W0110
+2026-11-02 08:04:37.976 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.053 temp=25.6 rf_fwd=450 rf_ref=5.2 gas=79.8 sub=W0111
+2026-11-02 08:04:38.505 | INFO  | TEST-CHA     | T-CHA | TEL pressure=767.6 temp=27.8 sub=W0110
+2026-11-02 08:04:40.976 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.050 temp=27.8 rf_fwd=448 rf_ref=4.0 gas=79.2 sub=W0111
+2026-11-02 08:04:41.505 | INFO  | TEST-CHA     | T-CHA | TEL pressure=763.1 temp=24.8 sub=W0110
+2026-11-02 08:04:41.505 | INFO  | TEST-CHA     | T-CHA | STEP_END step=VENT sub=W0110
+2026-11-02 08:04:42.180 | INFO  | TEST-CHA     | T-CHA | RECIPE_END recipe=TEST-RCP-2 sub=W0110 result=OK
+2026-11-02 08:04:43.230 | INFO  | TEST-CHA     | T-CHA | DOOR state=OPEN sub=W0110
+2026-11-02 08:04:43.230 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-CHA dst=TEST-LP1 sub=W0110
+2026-11-02 08:04:43.976 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.049 temp=27.0 rf_fwd=452 rf_ref=4.7 gas=81.0 sub=W0111
+2026-11-02 08:04:45.756 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-CHA sub=W0110 vacuum=OK
+2026-11-02 08:04:46.976 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.051 temp=25.0 rf_fwd=448 rf_ref=3.3 gas=80.5 sub=W0111
+2026-11-02 08:04:49.976 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.053 temp=27.5 rf_fwd=452 rf_ref=5.0 gas=81.0 sub=W0111
+2026-11-02 08:04:50.876 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-LP1 sub=W0110
+2026-11-02 08:04:52.060 | INFO  | TEST-SCHED   | T-SCHED | SUB_DONE sub=W0110 chamber=A
+2026-11-02 08:04:52.976 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.046 temp=27.7 rf_fwd=449 rf_ref=4.5 gas=80.6 sub=W0111
+2026-11-02 08:04:55.976 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.047 temp=24.6 rf_fwd=450 rf_ref=3.6 gas=79.8 sub=W0111
+2026-11-02 08:04:58.976 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.051 temp=27.4 rf_fwd=451 rf_ref=5.3 gas=80.0 sub=W0111
+2026-11-02 08:05:01.976 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.045 temp=26.6 rf_fwd=450 rf_ref=5.1 gas=79.3 sub=W0111
+2026-11-02 08:05:04.976 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.047 temp=25.3 rf_fwd=449 rf_ref=4.3 gas=79.7 sub=W0111
+2026-11-02 08:05:04.976 | INFO  | TEST-CHB     | T-CHB | STEP_END step=PROCESS2 sub=W0111
+2026-11-02 08:05:05.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.085 pump_rpm=5955
+2026-11-02 08:05:05.423 | INFO  | TEST-CHB     | T-CHB | STEP_START step=PURGE sub=W0111 gas_set=200
+2026-11-02 08:05:05.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=10.4 temp_c=19.4
+2026-11-02 08:05:08.423 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.050 temp=24.3 gas=199.5 sub=W0111
+2026-11-02 08:05:11.423 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.054 temp=27.7 gas=199.1 sub=W0111
+2026-11-02 08:05:14.423 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.053 temp=25.2 gas=200.2 sub=W0111
+2026-11-02 08:05:17.423 | INFO  | TEST-CHB     | T-CHB | TEL pressure=0.051 temp=25.5 gas=200.4 sub=W0111
+2026-11-02 08:05:17.423 | INFO  | TEST-CHB     | T-CHB | STEP_END step=PURGE sub=W0111
+2026-11-02 08:05:17.909 | INFO  | TEST-CHB     | T-CHB | STEP_START step=VENT sub=W0111 pressure_set=760
+2026-11-02 08:05:20.909 | INFO  | TEST-CHB     | T-CHB | TEL pressure=768.8 temp=24.8 sub=W0111
+2026-11-02 08:05:23.909 | INFO  | TEST-CHB     | T-CHB | TEL pressure=753.5 temp=25.8 sub=W0111
+2026-11-02 08:05:26.909 | INFO  | TEST-CHB     | T-CHB | TEL pressure=747.1 temp=24.1 sub=W0111
+2026-11-02 08:05:29.909 | INFO  | TEST-CHB     | T-CHB | TEL pressure=754.4 temp=24.3 sub=W0111
+2026-11-02 08:05:29.909 | INFO  | TEST-CHB     | T-CHB | STEP_END step=VENT sub=W0111
+2026-11-02 08:05:30.380 | INFO  | TEST-CHB     | T-CHB | RECIPE_END recipe=TEST-RCP-2 sub=W0111 result=OK
+2026-11-02 08:05:31.737 | INFO  | TEST-CHB     | T-CHB | DOOR state=OPEN sub=W0111
+2026-11-02 08:05:31.737 | INFO  | TEST-ROBOT   | T-ROBOT | MOVE_START src=TEST-CHB dst=TEST-LP1 sub=W0111
+2026-11-02 08:05:33.895 | WARN  | TEST-ROBOT   | T-ROBOT | GRIP_RETRY station=TEST-CHB sub=W0111 retry=1
+2026-11-02 08:05:35.000 | INFO  | TEST-VAC     | T-SYS | STATUS foreline=0.098 pump_rpm=6045
+2026-11-02 08:05:35.285 | INFO  | TEST-ROBOT   | T-ROBOT | PICK_DONE station=TEST-CHB sub=W0111 vacuum=OK
+2026-11-02 08:05:35.500 | INFO  | TEST-COOLANT | T-SYS | STATUS flow_lpm=10.4 temp_c=18.5
+2026-11-02 08:05:41.170 | INFO  | TEST-ROBOT   | T-ROBOT | PLACE_DONE station=TEST-LP1 sub=W0111
+2026-11-02 08:05:42.063 | INFO  | TEST-SCHED   | T-SCHED | SUB_DONE sub=W0111 chamber=B
+2026-11-02 08:05:43.092 | INFO  | TEST-SCHED   | T-SCHED | LOT_END lot=TEST-LOT-001 processed=11 result=OK
+2026-11-02 08:05:46.092 | INFO  | TEST-SYS     | T-SYS | SESSION_END session=TEST-SS-0028 result=COMPLETED

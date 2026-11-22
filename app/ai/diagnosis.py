@@ -122,8 +122,8 @@ def rules(ctx: DiagnosisContext) -> list:
         errors = []
         for step in answer.response_plan:
             kinds = package.kinds_of(step.evidence)
-            if not kinds or not kinds <= RESPONSE_KINDS:
-                errors.append(f"V-9: 대응 항목은 승인된 매뉴얼·가이드 근거만 가리켜야 함: {step.text[:50]}")
+            if "RESPONSE" not in kinds or not kinds <= RESPONSE_KINDS:
+                errors.append(f"V-9: 대응 항목은 승인된 조치(RESPONSE) 근거를 가리켜야 함: {step.text[:50]}")
         return errors
 
     def v11_likelihood(answer: DiagnosisAnswer) -> list[str]:
@@ -178,9 +178,19 @@ def repair(ctx: DiagnosisContext) -> Callable[[DiagnosisAnswer], None]:
             else:
                 answer.unknowns.append(hyp.text)
         answer.hypotheses = kept
-        # V-9: 승인된 대응·가이드 근거만 가리키지 않는 조치 문장은 버린다(정책 V-9 '근거 없는 조치 문장은 버림')
-        answer.response_plan = [step for step in answer.response_plan
-                                if (kinds := package.kinds_of(step.evidence)) and kinds <= RESPONSE_KINDS]
+        # V-9: 승인된 조치(RESPONSE)를 가리키지 않는 조치 문장은 버리고, 남긴 항목은 가리킨 조치의 원문 그대로 보인다.
+        # 원인·확인 방법 같은 가이드 키를 붙이고 문장은 지어내던 일(리뷰 2026-11-22)을 막는다 — 등록된 조치 문구만 화면에.
+        plan = []
+        for step in answer.response_plan:
+            responses = [k for k in step.evidence if k in package and package.get(k).kind == "RESPONSE"]
+            if not responses:
+                continue
+            original = package.get(responses[0]).ref.get("content")
+            if original:
+                step.text = original
+            step.evidence = [k for k in step.evidence if k in package and package.get(k).kind in RESPONSE_KINDS]
+            plan.append(step)
+        answer.response_plan = plan
         if answer.abnormal_likelihood is not None and not answer.likelihood_evidence:  # V-11: 근거 없는 가능성은 쓰지 않음
             if answer.likelihood_reason.strip():
                 answer.unknowns.append(answer.likelihood_reason.strip())
@@ -220,6 +230,8 @@ def diagnose(client: OllamaClient, model: str | None, ctx: DiagnosisContext,
         "가설에서 오류 코드를 언급하려면 그 코드를 다루는 GUIDE·REFERENCE·ANSWER 키를 함께 넣고, 그런 키가 없으면 그 내용은 unknowns에 적는다.\n"
         "7) abnormal_likelihood에는 이 로그가 비정상일 가능성을 0~100 정수로, likelihood_reason에 이유를, likelihood_evidence에 근거 키를 적는다. "
         "비슷한 승인 로그의 사용자 판정·메모·판단 가이드(CASE)와 사용자 답(ANSWER)을 참고한다. "
+        "그중 '근거 지문이 비슷한 확인 로그'와 '근거별 실적'(CASE)을 가장 중요하게 본다: 확인된 비정상 로그와 같은 근거면 "
+        "그 판단 가이드를 가설의 근거로 쓰고, 확인된 정상 로그에도 있던 근거면 비정상 가능성을 낮춘다(새 뜻을 지어내지 마라). "
         "비교할 비슷한 정상 로그가 없어(normal_match=NO_MATCH) 판단할 수 없으면 abnormal_likelihood는 null로 두고 "
         "그 이유를 unknowns에 적는다. 비교하지 못한 것은 비정상의 근거가 아니다. "
         "가설마다 likelihood(0~100)를 적되 합이 100을 넘지 않게 하고, 모르는 만큼은 남겨 둔다(판단 불가). 근거가 약하면 낮게 매긴다.\n"

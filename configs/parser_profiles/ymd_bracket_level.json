@@ -1,20 +1,47 @@
 {
   "name": "ymd_bracket_level",
-  "description": "범용 예시 프로파일: 'YYYY/MM/DD 또는 YYYY.MM.DD (오전|오후|AM|PM) 시:분:초(.밀리초) [레벨] 구성요소 -|>|:|| 메시지'. 레벨은 대괄호 안의 한 글자(I/W/E…)나 한국어([정보]/[경고]/[오류]…)를 별칭표로 읽는다. 연-월-일(-) 날짜는 오전/오후가 있을 때만 이 프로파일로 읽는다(그 밖은 generic_iso_*). 특정 장비의 형식이 아니다.",
-  "line_regex": "^(?P<ts>\\d{4}[/.]\\d{1,2}[/.]\\d{1,2}[ T]+(?:(?:오전|오후|AM|PM)\\s+)?\\d{1,2}:\\d{2}:\\d{2}(?:[.,]\\d{1,6})?|\\d{4}-\\d{1,2}-\\d{1,2}\\s+(?:오전|오후|AM|PM)\\s+\\d{1,2}:\\d{2}:\\d{2}(?:[.,]\\d{1,6})?)\\s+\\[(?P<level>[^\\]\\s]{1,9})\\]\\s+(?:(?P<component>[A-Za-z0-9_.\\-/]+)\\s*(?:-|>|:|\\|)\\s+)?(?P<message>.*)$",
+  "description": "범용 예시 프로파일: 'YYYY/MM/DD 또는 YYYY.MM.DD (오전|오후|AM|PM) 시:분:초(.밀리초) [레벨] 구성요소 -|>|:|| 메시지'. 레벨은 대괄호 안의 한 글자(I/W/E…)·영어 레벨 낱말([INFO]/[WARN]…)·한국어([정보]/[경고]/[오류]…)만 받는다. 대괄호 안이 레벨 낱말이 아니면(예: [TEST-PAD] 같은 구성요소) 이 프로파일로 읽지 않는다(2026-11-22, 구성요소를 레벨로 읽고 긴 이름 줄을 앞 줄에 붙이던 문제). 연-월-일(-) 날짜는 오전/오후가 있을 때만 이 프로파일로 읽는다(그 밖은 generic_iso_*). 특정 장비의 형식이 아니다.",
+  "line_regex": "^(?P<ts>\\d{4}[/.]\\d{1,2}[/.]\\d{1,2}[ T]+(?:(?:오전|오후|AM|PM)\\s+)?\\d{1,2}:\\d{2}:\\d{2}(?:[.,]\\d{1,6})?|\\d{4}-\\d{1,2}-\\d{1,2}\\s+(?:오전|오후|AM|PM)\\s+\\d{1,2}:\\d{2}:\\d{2}(?:[.,]\\d{1,6})?)\\s+\\[(?P<level>(?i:[TDVINWEF]|TRACE|DEBUG|DBG|VERBOSE|INFO|INF|NOTICE|WARN|WARNING|WRN|ERROR|ERR|FATAL|FTL|CRIT|CRITICAL|SEVERE|ALERT|EMERG)|디버그|정보|알림|경고|주의|오류|에러|치명|심각)\\]\\s+(?:(?P<component>[A-Za-z0-9_.\\-/]+)\\s*(?:-|>|:|\\|)\\s+)?(?P<message>.*)$",
   "timestamp": {
     "kind": "strptime",
     "formats": [
-      "%Y/%m/%d %H:%M:%S.%f", "%Y/%m/%d %H:%M:%S", "%Y/%m/%d %H:%M:%S,%f", "%Y/%m/%dT%H:%M:%S.%f", "%Y/%m/%dT%H:%M:%S",
-      "%Y.%m.%d %H:%M:%S.%f", "%Y.%m.%d %H:%M:%S", "%Y.%m.%d %H:%M:%S,%f",
-      "%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S,%f"
+      "%Y/%m/%d %H:%M:%S.%f",
+      "%Y/%m/%d %H:%M:%S",
+      "%Y/%m/%d %H:%M:%S,%f",
+      "%Y/%m/%dT%H:%M:%S.%f",
+      "%Y/%m/%dT%H:%M:%S",
+      "%Y.%m.%d %H:%M:%S.%f",
+      "%Y.%m.%d %H:%M:%S",
+      "%Y.%m.%d %H:%M:%S,%f",
+      "%Y-%m-%d %H:%M:%S.%f",
+      "%Y-%m-%d %H:%M:%S",
+      "%Y-%m-%d %H:%M:%S,%f"
     ],
-    "ampm": {"오전": "AM", "오후": "PM", "AM": "AM", "PM": "PM"}
+    "ampm": {
+      "오전": "AM",
+      "오후": "PM",
+      "AM": "AM",
+      "PM": "PM"
+    }
   },
   "level_map": {
-    "T": "TRACE", "D": "DEBUG", "V": "DEBUG", "I": "INFO", "N": "NOTICE", "W": "WARN", "E": "ERROR", "F": "FATAL",
-    "디버그": "DEBUG", "정보": "INFO", "알림": "NOTICE", "경고": "WARN", "주의": "WARN", "오류": "ERROR", "에러": "ERROR",
-    "치명": "FATAL", "심각": "FATAL"
+    "T": "TRACE",
+    "D": "DEBUG",
+    "V": "DEBUG",
+    "I": "INFO",
+    "N": "NOTICE",
+    "W": "WARN",
+    "E": "ERROR",
+    "F": "FATAL",
+    "디버그": "DEBUG",
+    "정보": "INFO",
+    "알림": "NOTICE",
+    "경고": "WARN",
+    "주의": "WARN",
+    "오류": "ERROR",
+    "에러": "ERROR",
+    "치명": "FATAL",
+    "심각": "FATAL"
   },
   "continuation": true,
   "sniff_threshold": 0.6,

@@ -42,6 +42,7 @@ from app.learning.intake import IntakeResult, IntakeService
 from app.learning.normal_learner import default_client_factory
 from app.models.enums import OriginPurpose
 from app.ui.case_editor import text_box
+from app.ui.confirm_box import ConfirmBox
 from app.ui.error_messages_box import ErrorMessagesBox
 from app.ui.log_import_panel import LogImportPanel
 from app.ui.navigation import StepPages, nav_row
@@ -84,18 +85,20 @@ def ai_likelihood(result: AnalysisResult) -> int | None:
 
 
 def unit_status(result: AnalysisResult, errors: list[ErrorMessage] | None = None) -> tuple[str, str, str]:
-    """목록 칸에 적을 (글, 색조, 풀이). AI 가능성이 있으면 덧붙이고, 풀이에 예상 에러 메시지 앞 줄(CR-11 EM-03)."""
-    level = result.axes.get("anomaly_level", "NOT_EVALUATED")
-    text = LEVEL_SHORT.get(level, level)
+    """목록 칸에 적을 (글, 색조, 풀이). 최종 판정 하나(정상·비정상 의심·판단 보류, 리뷰 2026-11-22)와 AI 가능성,
+    풀이에 판정 이유·결과 분류·예상 에러 메시지 앞 줄(CR-11 EM-03)."""
+    verdict = result.verdict
+    text = verdict.short
     answer = getattr(result.ai, "answer", None)
     if answer is not None and answer.abnormal_likelihood is not None:
         text += f" · AI {answer.abnormal_likelihood}%"
-    tooltip = "\n".join(f"{title}: {labels.get(result.axes[axis], result.axes[axis])}"
-                        for axis, (title, labels) in AXIS_LABELS.items()) + f"\n분석 번호 R-{result.run_id:04d}"
+    lines = [f"최종 판정: {verdict.title}", *[f"  · {reason}" for reason in verdict.reasons]]
+    lines += [f"{title}: {labels.get(result.axes[axis], result.axes[axis])}" for axis, (title, labels) in AXIS_LABELS.items()]
+    tooltip = "\n".join(lines) + f"\n분석 번호 R-{result.run_id:04d}"
     if errors:
         tooltip += "\n예상 에러 메시지:" + "".join(
             f"\n  {m.line if m.line is not None else '—'}행  {m.text[:90]}" for m in errors[:3])
-    return text, AXIS_TONE["anomaly_level"].get(level, "neutral"), tooltip
+    return text, verdict.tone, tooltip
 
 
 def section_label(text: str) -> QLabel:
@@ -298,6 +301,7 @@ class LogAnalysisPage(QWidget):
         self.error_preview.hide()
         self.result_list = self._result_list()
         self.detail_list = self._result_list()
+        self.confirm_box = ConfirmBox(self.context.database)  # CR-14: 확인 결과를 바로 사례로
 
         # ① 로그 넣기
         self.story.edit.setMinimumHeight(64)
@@ -344,6 +348,7 @@ class LogAnalysisPage(QWidget):
         self.cards.setHorizontalSpacing(10)
         self._wide: bool | None = None
         summary.addLayout(self.cards)
+        summary.addWidget(self.confirm_box)
         summary.addStretch(1)
         self.result_scroll = self._scroll(summary)
         self.result_scroll.installEventFilter(self)
@@ -819,10 +824,13 @@ class LogAnalysisPage(QWidget):
         for button in (self.report_button, self.register_normal, self.register_abnormal):
             button.setEnabled(False)
         self.report_label.clear()
+        self.confirm_box.set_log(None)
 
     def show_result(self, result: AnalysisResult) -> None:
         self.result = result
         self._show_title()
+        self.confirm_box.set_log(self.result_log_ids(),  # 같은 수집 세션 묶음이면 묶음 전체를 사례 하나로(리뷰 2026-11-22)
+                                 result.memory.note() if getattr(result, "memory", None) is not None else "")
         guidance = result.guidance
         self.guidance_box.setTitle(GUIDANCE_TITLES[guidance.level])
         self.guidance_message.setText(guidance.message)
@@ -859,12 +867,12 @@ class LogAnalysisPage(QWidget):
             cell.setText(text)
             set_role(cell, "cell-value", AXIS_TONE[axis].get(result.axes[axis], "neutral"))
         self.axes_label.setText("\n".join(lines))
-        level = result.axes.get("anomaly_level", "NOT_EVALUATED")
-        tone = AXIS_TONE["anomaly_level"].get(level, "neutral")
-        self.verdict.setText(AXIS_LABELS["anomaly_level"][1].get(level, level))
-        set_role(self.verdict, "verdict", tone)
-        self.detail_stamp.setText(LEVEL_SHORT.get(level, level))
-        set_role(self.detail_stamp, "stamp", tone)
+        verdict = result.verdict  # 최종 판정 하나: 정상 / 비정상 / 판단 보류(리뷰 2026-11-22)
+        self.verdict.setText(verdict.title)
+        self.verdict.setToolTip("\n".join(verdict.reasons))
+        set_role(self.verdict, "verdict", verdict.tone)
+        self.detail_stamp.setText(verdict.short)
+        set_role(self.detail_stamp, "stamp", verdict.tone)
         self.detail_axes.setText(" · ".join(lines))
         self.evidence_summary.setText(self.summary_text(result))
 
@@ -888,10 +896,18 @@ class LogAnalysisPage(QWidget):
         for message in self.error_messages(result):
             counts[message.group_title] = counts.get(message.group_title, 0) + 1
         evidence = " · ".join(f"{title} {count}" for title, count in counts.items()) or "이상으로 보이는 줄 없음"
+        reasons = "판정 이유: " + " / ".join(result.verdict.reasons)
+        judgment = getattr(result, "ai_judgment", None)
         likelihood = ai_likelihood(result)
-        ai = (f"AI 비정상 가능성 {likelihood}% (AI 추정치 · 사용자 검토 필요)" if likelihood is not None
-              else "AI 가능성 없음(AI를 쓰지 않았거나 매기지 않음)")
-        return evidence + "\n" + ai
+        if judgment is not None:
+            said = {"ABNORMAL": "비정상 쪽", "NORMAL": "정상 쪽", "UNDECIDED": "판단 보류"}[judgment.state]
+            basis = f"문턱 {judgment.threshold}%" + (" · 확인 이력 보정" if judgment.calibrated else "")
+            ai = f"AI: {said}" + (f" (가능성 {likelihood}% · {basis})" if likelihood is not None else " (가능성을 매기지 않음)")
+        elif likelihood is not None:
+            ai = f"AI 비정상 가능성 {likelihood}% (AI 추정치 · 사용자 검토 필요)"
+        else:
+            ai = "AI 의견 없음(AI를 쓰지 않음)"
+        return evidence + "\n" + reasons + "\n" + ai
 
     def error_messages(self, result: AnalysisResult) -> list[ErrorMessage]:
         """CR-11 EM-01·02: 결정론 근거에서 고른 예상 에러 메시지(분석마다 한 번만 만든다)."""
@@ -1013,6 +1029,9 @@ class LogAnalysisPage(QWidget):
             lines.append(f"  이유: {answer.likelihood_reason or '-'}  근거 [{', '.join(answer.likelihood_evidence)}]")
         else:
             lines.append("■ AI가 비정상일 가능성을 매기지 않았습니다.")
+        judgment = getattr(result, "ai_judgment", None)
+        if judgment is not None:  # CR-14 CM-07: 확인 이력으로 고른 문턱
+            lines.append(f"  {judgment.note()}")
         if answer.observations:
             lines.append("■ 관측 사실")
             lines += [f"  · {o.text}  [{', '.join(o.evidence)}]" for o in answer.observations]

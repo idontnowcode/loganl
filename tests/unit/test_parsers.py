@@ -281,3 +281,19 @@ def test_new_profile_options_validate() -> None:
                       timestamp={"kind": "strptime", "formats": ["%H:%M"], "ampm": {"오전": "MORNING"}})
     structured = ParserProfile(name="j", line_format="json")  # 구조형은 line_regex가 없어도 된다
     assert structured.line_regex == ""
+
+
+def test_bracket_component_is_not_read_as_level(registry: ParserRegistry) -> None:
+    """'시각 [구성요소] 메시지'(레벨 칸 없음)를 ymd_bracket_level이 [구성요소]를 레벨로 읽고, 이름이 긴 구성요소 줄을
+    앞 줄에 붙이던 문제(2026-11-22 무작위 제품군 L1_F1). 레벨 자리에는 레벨 낱말만 받는다."""
+    text = ("2026/11/16 16:12:41.924 [TEST-SORE-A] TEST-HANE fe_n: A\n"
+            "2026/11/16 16:12:42.211 [TEST-PAD] TEST-TUDUNO we_n: 37\n"
+            "2026/11/16 16:12:42.568 [TEST-KURED] TEST-NEHAPA err: TEST-E167\n"
+            "2026/11/16 16:12:42.785 [TEST-KURED] TEST-KAMOSE roda: 41\n")
+    parser, events = parse_text(registry, text)
+    assert parser.name != "ymd_bracket_level"
+    assert len(events) == 4 and [e.component for e in events] == ["TEST-SORE-A", "TEST-PAD", "TEST-KURED", "TEST-KURED"]
+    assert events[2].error_code == "TEST-E167" and all(e.level in (None, "") for e in events)
+    words = "2026/11/10 15:32:06.080 [INFO] TEST-CTRL - TEST-START\n2026/11/10 15:32:07.152 [WARN] TEST-SUB - TEST-WAIT\n"
+    parser, events = parse_text(registry, words)
+    assert parser.name == "ymd_bracket_level" and [e.level for e in events] == ["INFO", "WARN"]
