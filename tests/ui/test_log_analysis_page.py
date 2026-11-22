@@ -289,3 +289,38 @@ def test_confirm_keeps_memo_and_saves_same_session_as_one_case(qtbot, ctx, knowl
     case = service.group_case(ids)
     assert case is not None and case.case_type == "ABNORMAL" and case.status == "APPROVED"
     assert service.group_entry(ids).criteria == "묶음 가상 판단 근거"
+
+
+def test_question_box_answer_saves_criterion_and_reanalyzes(qtbot, ctx, knowledge, tmp_path: Path) -> None:  # noqa: F811  CR-15 JQ-07
+    """② '판단을 돕는 질문': 처음 보는 알림 줄을 '문제의 표시'로 답하면 기준이 저장되고, '이 로그 다시 분석'으로 바로 비정상 의심."""
+    from app.learning.criteria import CriteriaService
+    from app.ui.criteria_dialog import CriteriaDialog
+    from tests.logdata import NORMAL_SEQUENCE, iso_lines, write
+
+    lines = iso_lines(NORMAL_SEQUENCE + [("INFO", "TEST-SYS", "TEST-NOTICE flag=TEST-FK unit=2")], start_second=130)
+    ids = load(ctx, [write(tmp_path / "notice.log", lines)], OriginPurpose.ANALYSIS)
+    page = LogAnalysisPage(ctx)
+    qtbot.addWidget(page)
+    page.import_panel.set_log_file_ids(ids)
+    page.use_ai.setChecked(False)
+    with qtbot.waitSignal(page.analysis_done, timeout=15_000):
+        page.start_analysis()
+    box = page.question_box
+    assert not box.isHidden() and box.rows
+    row = next(r for r in box.rows if "TEST-FK" in (r.question.example or ""))
+    box.method.setText("가상: 이 알림이 나오면 점검")
+    with qtbot.waitSignal(box.answered, timeout=5_000):
+        row.buttons[0].click()  # 문제의 표시예요
+    saved = CriteriaService(ctx.database).all()
+    assert len(saved) == 1 and saved[0].kind == "ABNORMAL_SIGN" and saved[0].method_text == "가상: 이 알림이 나오면 점검"
+    assert box.again.isEnabled() and "저장했습니다" in row.status.text() and not row.buttons[0].isEnabled()
+    with qtbot.waitSignal(page.analysis_done, timeout=15_000):
+        box.again.click()
+    assert page.result.verdict.state == "ABNORMAL" and page.verdict.text() == "비정상 의심"
+
+    dialog = CriteriaDialog(ctx)
+    qtbot.addWidget(dialog)
+    assert dialog.table.rowCount() == 1 and dialog.table.item(0, 0).text() == "켜짐"
+    dialog.table.selectRow(0)
+    dialog.toggle.click()
+    assert dialog.table.item(0, 0).text() == "꺼짐" and CriteriaService(ctx.database).active() == []

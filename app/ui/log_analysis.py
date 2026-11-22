@@ -43,6 +43,7 @@ from app.learning.normal_learner import default_client_factory
 from app.models.enums import OriginPurpose
 from app.ui.case_editor import text_box
 from app.ui.confirm_box import ConfirmBox
+from app.ui.question_box import QuestionBox
 from app.ui.error_messages_box import ErrorMessagesBox
 from app.ui.log_import_panel import LogImportPanel
 from app.ui.navigation import StepPages, nav_row
@@ -302,6 +303,8 @@ class LogAnalysisPage(QWidget):
         self.result_list = self._result_list()
         self.detail_list = self._result_list()
         self.confirm_box = ConfirmBox(self.context.database)  # CR-14: 확인 결과를 바로 사례로
+        self.question_box = QuestionBox(self.context.database)  # CR-15: 애매할 때 판단 기준을 묻기
+        self.question_box.reanalyze.connect(self.reanalyze)
 
         # ① 로그 넣기
         self.story.edit.setMinimumHeight(64)
@@ -348,6 +351,7 @@ class LogAnalysisPage(QWidget):
         self.cards.setHorizontalSpacing(10)
         self._wide: bool | None = None
         summary.addLayout(self.cards)
+        summary.addWidget(self.question_box)
         summary.addWidget(self.confirm_box)
         summary.addStretch(1)
         self.result_scroll = self._scroll(summary)
@@ -375,7 +379,11 @@ class LogAnalysisPage(QWidget):
         self.guidance_list.setTextElideMode(Qt.TextElideMode.ElideNone)
         self.guidance_list.installEventFilter(self)
         self.guidance_detail_list.installEventFilter(self)
-        QVBoxLayout(self.guidance_detail).addWidget(self.guidance_detail_list)
+        self.guidance_detail_message = QLabel()  # 대응이 없을 때는 목록 상자 대신 글로(빈 줄이 남지 않게)
+        self.guidance_detail_message.setWordWrap(True)
+        detail_guidance = QVBoxLayout(self.guidance_detail)
+        detail_guidance.addWidget(self.guidance_detail_message)
+        detail_guidance.addWidget(self.guidance_detail_list)
         findings = QWidget()
         findings_layout = QVBoxLayout(findings)
         findings_layout.setContentsMargins(0, 0, 0, 0)
@@ -383,6 +391,7 @@ class LogAnalysisPage(QWidget):
         findings_layout.addWidget(self.findings_table)
         for box in (self.error_box, self.reference_box, self.ai_box):
             box.setTitle("")
+            set_role(box, "plain-card")  # 제목은 접는 칸 머리에 있으니 카드 위 여백을 비우지 않는다
         self.detail_sections = {
             "errors": Collapsible("예상 에러 메시지 (전체)", self._holder(self.error_box), expanded=True),
             "references": Collapsible("참고 자료 — 로그에 나온 코드 (승인된 참고 자료, 권장 대응과 별개)",
@@ -640,6 +649,16 @@ class LogAnalysisPage(QWidget):
         if not units:
             self.notes_label.setText("분석할 로그를 먼저 올리세요.")
             return
+        self._start(units)
+
+    def reanalyze(self, log_ids: list[int]) -> None:
+        """이 분석 단위만 다시 분석(판단 기준을 남긴 뒤 바로 확인, CR-15)."""
+        present = set(self.import_panel.log_file_ids())
+        unit = sorted(i for i in log_ids if i in present)
+        if unit:
+            self._start([unit])
+
+    def _start(self, units) -> None:
         if self.runner.busy:
             return
         self._todo = [list(u) for u in units]
@@ -800,6 +819,9 @@ class LogAnalysisPage(QWidget):
         self.detail_axes.clear()
         self.guidance_detail.setTitle(GUIDANCE_TITLES["NONE"])
         self.guidance_detail_list.clear()
+        self.guidance_detail_list.hide()
+        self.guidance_detail_message.setText(message or "분석을 실행하면 비슷한 승인 사례의 대응 방법을 보여 줍니다.")
+        self.guidance_detail_message.show()
         self.error_preview.hide()
         self.report_button_summary.setEnabled(False)
         self.guidance_box.setTitle(GUIDANCE_TITLES["NONE"])
@@ -825,12 +847,14 @@ class LogAnalysisPage(QWidget):
             button.setEnabled(False)
         self.report_label.clear()
         self.confirm_box.set_log(None)
+        self.question_box.set_questions([], [], None)
 
     def show_result(self, result: AnalysisResult) -> None:
         self.result = result
         self._show_title()
         self.confirm_box.set_log(self.result_log_ids(),  # 같은 수집 세션 묶음이면 묶음 전체를 사례 하나로(리뷰 2026-11-22)
                                  result.memory.note() if getattr(result, "memory", None) is not None else "")
+        self.question_box.set_questions(list(getattr(result, "questions", []) or []), self.result_log_ids(), result.run_id)
         guidance = result.guidance
         self.guidance_box.setTitle(GUIDANCE_TITLES[guidance.level])
         self.guidance_message.setText(guidance.message)
@@ -851,8 +875,10 @@ class LogAnalysisPage(QWidget):
         self.guidance_detail_list.clear()
         for index in range(self.guidance_list.count()):
             self.guidance_detail_list.addItem(self.guidance_list.item(index).text())
-        if not self.guidance_list.count():
-            self.guidance_detail_list.addItem(guidance.message)
+        has_items = self.guidance_list.count() > 0
+        self.guidance_detail_list.setVisible(has_items)
+        self.guidance_detail_message.setText("" if has_items else guidance.message)
+        self.guidance_detail_message.setVisible(not has_items)
         self._fit_guidance()
         self.show_references(result)
         self.show_errors(result)

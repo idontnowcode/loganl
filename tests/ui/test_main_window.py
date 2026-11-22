@@ -87,7 +87,7 @@ def test_aux_menu_has_five_items_and_only_settings_enabled(qtbot, context) -> No
 def test_status_bar_shows_db_and_data_folder(qtbot, context) -> None:
     window = make_window(qtbot, context)
     assert str(context.paths.root) in window.data_label.text()
-    assert "스키마 v7" in window.db_label.text()
+    assert "스키마 v8" in window.db_label.text()
 
 
 def test_ollama_status_connected(qtbot, context) -> None:

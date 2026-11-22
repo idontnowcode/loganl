@@ -40,15 +40,22 @@ def memory_split(memory: Any) -> bool:
     return weight >= MIN_VOTE_WEIGHT and NORMAL_SHARE < memory.share < ABNORMAL_SHARE
 
 
-def final_verdict(axes: dict[str, str], memory: Any = None, ai_judgment: Any = None, short_log: bool = False) -> Verdict:
-    """ai_judgment는 받기만 하고 판정에는 쓰지 않는다(설명 보조)."""
+def final_verdict(axes: dict[str, str], memory: Any = None, ai_judgment: Any = None, short_log: bool = False,
+                  criteria: Any = None) -> Verdict:
+    """ai_judgment는 받기만 하고 판정에는 쓰지 않는다(설명 보조). criteria: 엔지니어가 답한 판단 기준(CR-15) —
+    이상 수준(axes)에 이미 반영돼 있고, 여기서는 이유와 '사람 확인 필요' 보류만 더한다."""
     level = axes.get("anomaly_level")
+    if criteria is not None and criteria.hold_decisive and level != "RULE_VIOLATION":
+        return Verdict(UNDECIDED, "판단 보류", "info", list(criteria.hold), "판단 보류")
+    by_criteria = list(criteria.reasons) if criteria is not None and criteria.changed else []
     if level == "RULE_VIOLATION":
         return Verdict(ABNORMAL, "비정상 — 승인된 규칙 위반", "bad", ["승인된 규칙을 어긴 근거가 있음"], "규칙 위반")
     if level == "SUSPECTED":
         reasons = ["정상 로그·규칙과 다른 근거가 있음"]
         if memory is not None and memory.changed:
             reasons = ["근거 지문이 비슷한 확인된 비정상 로그가 있음(사례 판단)"]
+        if by_criteria:
+            reasons = [f"엔지니어 기준: {r}" for r in by_criteria]
         return Verdict(ABNORMAL, "비정상 의심", "warn", reasons, "비정상 의심")
     if level in (None, "NOT_EVALUATED"):
         return Verdict(UNDECIDED, "판단 보류", "info", ["비교할 정상 로그가 없음 — 정상 로그를 먼저 학습하세요"], "판단 보류")
@@ -64,9 +71,11 @@ def final_verdict(axes: dict[str, str], memory: Any = None, ai_judgment: Any = N
     normal_reasons = ["정상 로그와 비교해 이상 근거를 찾지 못함"]
     if memory is not None and memory.changed:
         normal_reasons = ["규칙이 본 차이가 모두 확인된 정상 로그에도 있었음(사례 판단)"]
+    if by_criteria:
+        normal_reasons = [f"엔지니어 기준: {r}" for r in by_criteria]
     return Verdict(NORMAL, "정상 — 찾은 이상 없음", "ok", normal_reasons, "정상")
 
 
 def verdict_of(result: Any) -> Verdict:
     return final_verdict(result.axes, getattr(result, "memory", None), getattr(result, "ai_judgment", None),
-                         getattr(result, "short_log", False))
+                         getattr(result, "short_log", False), getattr(result, "criteria", None))

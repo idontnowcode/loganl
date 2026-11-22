@@ -205,3 +205,26 @@ def test_response_shows_only_for_abnormal_with_applicable_case(ctx, knowledge, t
     assert hit.verdict.state == "ABNORMAL" and hit.guidance.level == "MANUAL"
     assert "적용할 근거가 확인된" in hit.guidance.message
     assert "같은 오류 코드 TEST-E001" in hit.guidance.message or "근거 지문이 비슷함" in hit.guidance.message
+
+
+def test_answered_question_becomes_a_criterion_the_code_uses(ctx, knowledge, tmp_path: Path) -> None:  # CR-15 JQ-01~04
+    """처음 보는 알림 줄은 규칙이 뜻을 몰라 이상으로 보지 않는다 → 질문이 나오고, '문제의 표시'로 답하면
+    다음 분석부터 코드 판정이 그 기준으로 비정상 의심. '상황에 따라 다름'이면 판단 보류."""
+    from app.learning.criteria import ABNORMAL_SIGN, HOLD, CriteriaService
+    from tests.logdata import NORMAL_SEQUENCE
+
+    notice = NORMAL_SEQUENCE + [("INFO", "TEST-SYS", "TEST-NOTICE flag=TEST-FK unit=2")]
+    first = run(ctx, load(ctx, [write(tmp_path / "a.log", iso_lines(notice))], OriginPurpose.ANALYSIS), None, False)
+    assert first.axes["anomaly_level"] in ("NONE_FOUND", "NOT_EVALUATED") or first.verdict.state != "ABNORMAL"
+    line = next(q for q in first.questions if q.kind == "LINE" and "TEST-FK" in (q.example or ""))
+    service = CriteriaService(ctx.database)
+    service.save_answer(line, ABNORMAL_SIGN, method_text="가상: 이 알림은 점검 필요", log_ids=[1], run_id=first.run_id)
+    again = run(ctx, load(ctx, [write(tmp_path / "b.log", iso_lines(notice, start_second=30))], OriginPurpose.ANALYSIS),
+                None, False)
+    assert again.axes["anomaly_level"] == "SUSPECTED" and again.verdict.state == "ABNORMAL"
+    assert any("엔지니어 기준" in r for r in again.verdict.reasons)
+    assert not any(q.feature == line.feature for q in again.questions)  # 이미 기준이 있으면 다시 묻지 않음
+    service.save_answer(line, HOLD, log_ids=[1])  # 같은 특징의 새 답이 이전 기준을 대신
+    held = run(ctx, load(ctx, [write(tmp_path / "c.log", iso_lines(notice, start_second=60))], OriginPurpose.ANALYSIS),
+               None, False)
+    assert held.verdict.state == "UNDECIDED" and "사람이 확인해야 함" in held.verdict.reasons[0] and len(service.all()) == 1

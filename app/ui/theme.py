@@ -67,11 +67,12 @@ QTabBar::tab {{ background: transparent; color: {t['ink2']}; padding: 10px 18px;
 QTabBar::tab:hover {{ color: {t['ink']}; }}
 QTabBar::tab:selected {{ color: {t['accent']}; border-bottom: 2px solid {t['accent']}; }}
 
-/* 카드 */
+/* 카드: 제목은 테두리 위가 아니라 카드 안쪽 머리에(테두리 선이 글자를 지나가지 않게, 2026-11-22) */
 QGroupBox {{ background: {t['surface']}; border: 1px solid {t['line']}; border-radius: 8px;
-             margin-top: 10px; padding: 16px 12px 12px 12px; font-weight: 600; }}
-QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top left; left: 12px; top: 2px;
-                    padding: 0 4px; color: {t['ink']}; background: transparent; }}
+             margin-top: 6px; padding: 36px 14px 12px 14px; font-weight: 600; }}
+QGroupBox::title {{ subcontrol-origin: padding; subcontrol-position: top left; left: 14px; top: 11px;
+                    padding: 0; color: {t['ink']}; background: transparent; }}
+QGroupBox[role="plain-card"] {{ padding-top: 12px; }}
 
 /* 버튼 */
 QPushButton, QToolButton {{ background: {t['surface']}; border: 1px solid {t['line_input']}; border-radius: 6px;
@@ -153,9 +154,10 @@ QLabel[role="stamp"][tone="neutral"] {{ color: {t['neutral']}; background: {t['n
 
 /* 왼쪽 메뉴·단계 막대·판정 칸 (CR-12) */
 QFrame[role="nav"] {{ background: {t['surface']}; border: none; border-right: 1px solid {t['line']}; }}
-QLabel[role="nav-group"] {{ color: {t['ink2']}; font-size: 9.5pt; font-weight: 600; padding: 4px 8px 2px 8px;
+QLabel[role="nav-group"] {{ color: {t['neutral']}; font-size: 10pt; font-weight: 700; padding: 2px 10px 4px 10px;
                             background: transparent; }}
-QPushButton[role="nav-item"] {{ background: transparent; border: none; border-radius: 6px; padding: 8px 12px;
+QFrame[role="nav-rule"] {{ background: {t['line']}; max-height: 1px; min-height: 1px; border: none; margin: 0 6px; }}
+QPushButton[role="nav-item"] {{ background: transparent; border: none; border-radius: 6px; padding: 8px 12px 8px 16px;
                                 text-align: left; color: {t['ink']}; }}
 QPushButton[role="nav-item"]:hover {{ background: {t['neutral_soft']}; }}
 QPushButton[role="nav-item"]:checked {{ background: {t['accent_soft']}; color: {t['accent']}; font-weight: 700; }}

@@ -33,6 +33,8 @@ from app.core.cancel import NEVER_CANCEL, Cancelled, CancelToken
 from app.core.feature_extractor import FileFeatures, extract
 from app.core.reparse import current_parse
 from app.core.sequence_analyzer import build_timeline
+from app.learning.case_memory import fingerprint_of
+from app.learning.criteria import CriteriaService, Criterion, apply_criteria
 from app.learning.normal_learner import default_client_factory
 from app.models import utc_now_iso
 from app.storage.database import Database, transaction
@@ -40,6 +42,7 @@ from app.storage.paths import AppPaths
 from app.storage.repositories import (
     AnalysisRepository,
     CaseRepository,
+    CriteriaRepository,
     EventRepository,
     LogFileRepository,
     PatternRepository,
@@ -129,6 +132,8 @@ class AnalysisResult:
     memory: Any = None  # app.learning.case_memory.MemoryDecision (CR-14, 단일 로그 분석일 때)
     ai_judgment: Any = None  # app.learning.case_memory.AiJudgment (CR-14 CM-07, AI를 켰을 때)
     short_log: bool = False  # 이벤트가 적어 비교 근거가 적음(DT-20) — 최종 판정 '판단 보류' 사유
+    criteria: Any = None  # app.learning.criteria.CriteriaDecision (CR-15, 엔지니어가 답한 판단 기준)
+    questions: list = field(default_factory=list)  # app.learning.criteria.Question — 판단을 돕는 질문(CR-15 JQ-01·02)
 
     @property
     def verdict(self):
@@ -268,6 +273,18 @@ class DiagnosticEngine:
         if memory is not None and memory.total:
             findings.extend(memory_findings(memory))
             notes.append(memory.note())
+        # CR-15 JQ-04: 엔지니어가 판단 질문에 답해 만든 기준을 덮어 적용(가장 강함). 해로운 기준은 확인 로그로 점검해 끈다
+        fp = memory.fp if memory is not None and memory.fp is not None else fingerprint_of(findings, rule_level, normals_count)
+        unit_events = [e for f in features for e in events[f.log_file_id]]
+        active = CriteriaService(self.database).checked(memory.cases if memory is not None else [])
+        criteria = apply_criteria(fp.strong, fp.features, active, unit_events, level)
+        if criteria.fired:
+            level = criteria.level
+            notes.append(criteria.note())
+            findings.append(Finding("RETRIEVAL", "TEXT_MATCH", criteria.note()[:400],
+                                    stance="SUPPORTS" if criteria.level in DETECTED_LEVELS else "CONTRADICTS",
+                                    detail={"role": "CRITERION", "criteria": [c.id for c in criteria.fired],
+                                            "reasons": criteria.reasons + criteria.hold}))
         candidates = self._applicable(similar_abnormal, memory)
         guidance = build_response_guidance(self.database, candidates, level in DETECTED_LEVELS)
         for item in guidance.items:
@@ -300,7 +317,8 @@ class DiagnosticEngine:
         self._finish(run_id, status="COMPLETED", **axes)
         result = AnalysisResult(run_id, axes, findings, similar_normal, similar_abnormal, guidance, keys, notes,
                                 merged_files, references=references, passages=passages, memory=memory,
-                                short_log=bool(short))
+                                short_log=bool(short), criteria=criteria)
+        result.questions = self._questions(result, fp, active)
         report(4, STEPS, "결정론·검색 단계 완료")
         if request.use_ai:
             result.ai = self.ai_layer(result, request, cancel)
@@ -503,6 +521,19 @@ class DiagnosticEngine:
                 seen.add(s.case.id)
         return out
 
+    def _questions(self, result: AnalysisResult, fp, criteria) -> list:
+        """판단을 돕는 질문(CR-15 JQ-01·02): 판단 보류이거나 확인 이력 없는 근거가 있을 때만, 질문 틀은 코드가 만든다."""
+        from app.learning.criteria import make_questions
+
+        event_ids = [f.event_id for f in result.findings if f.layer == "DETERMINISTIC" and f.event_id]
+        with closing(self.database.connect()) as conn:
+            rows = EventRepository(conn).get_many(event_ids)
+            known = [Criterion.from_row(r) for r in CriteriaRepository(conn).all()]
+        raw = {e.id: e.raw_text for e in rows}
+        messages = {e.id: e.message for e in rows}
+        cases = result.memory.cases if result.memory is not None else []
+        return make_questions(result.findings, fp.strong, fp.weak, result.verdict.state, cases, known, raw, messages)
+
     def _save_verdict(self, result: AnalysisResult) -> None:
         """최종 판정(정상·비정상·판단 보류)·이유·사례 판단·AI 판정을 분석 폴더에 남긴다. 보고서가 화면과 같은 판정을 보이게
         (DB 구조는 그대로, 리뷰 2026-11-22). 못 써도 분석은 그대로."""
@@ -572,7 +603,7 @@ class DiagnosticEngine:
                            lambda case, ids: self._case_fingerprint(case, ids, normals_count),
                            FINGERPRINT_BUDGET_S, time.perf_counter)
         decision = decide(fp, cases)
-        decision.log_file_id, decision.own_case = key, own
+        decision.log_file_id, decision.own_case, decision.fp = key, own, fp
         return decision
 
     def _ai_memory(self, result: AnalysisResult) -> None:

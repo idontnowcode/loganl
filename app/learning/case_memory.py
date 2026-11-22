@@ -232,6 +232,7 @@ class MemoryDecision:
     total: int = 0
     cases: list[MemoryCase] = field(default_factory=list, repr=False)  # AI 판정 보정(CM-07)에 다시 쓴다
     log_file_id: str | None = None  # 이 판단을 낸 분석 단위의 지문 열쇠(unit_key)
+    fp: Fingerprint | None = None  # 이 단위의 근거 지문(판단 기준·판단 질문이 다시 씀, CR-15)
     own_case: bool = False  # 그 로그가 이미 사례인지(그러면 지문을 덮어쓰지 않음)
 
     @property

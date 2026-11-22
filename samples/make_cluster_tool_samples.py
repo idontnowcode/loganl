@@ -411,15 +411,20 @@ def pick_abnormal(count: int, pool: Sequence[tuple[str, str, str]] = ABNORMAL) -
 AMBIGUOUS = list(ABNORMAL) + [("notice_fk", "", "")] * 7  # 애매한 세트: 오류 아닌 INFO 알림 하나만 다른 비정상
 
 
-def build(seed: str, out: Path, total: int = 100, ambiguous: bool = False) -> list[tuple[str, str, str, str]]:
+def build(seed: str, out: Path, total: int = 100, ambiguous: bool = False, notices: int | None = None) -> list[tuple[str, str, str, str]]:
     """total개: 정상·비정상 비율은 100개 세트와 같게(63:37). 시험용 세트는 다른 씨앗·total=50으로 만든다.
     ambiguous: 정상의 약 12%에 문제없는 알림(TEST-FA), 비정상에 점검 필요 알림(TEST-FK)만 다른 로그를 섞는다."""
     rnd = random.Random(seed)
     normals = round(total * NORMALS / (NORMALS + len(ABNORMAL)))
     pool = AMBIGUOUS if ambiguous else ABNORMAL
     if ambiguous:  # 알림 비정상이 시험용(50개)에도 고루 들어가게 앞쪽에 둔다
-        pool = [job for job in pool if job[0] == "notice_fk"][:max(2, (total - normals) // 5)] + [j for j in ABNORMAL]
-    jobs: list[tuple[str | None, str, str]] = [(None, "", "")] * normals + pick_abnormal(total - normals, pool)
+        count = notices if notices is not None else max(2, (total - normals) // 5)
+        pool = [("notice_fk", "", "")] * count + [j for j in ABNORMAL]
+    picked = pick_abnormal(total - normals, pool)
+    if ambiguous and notices is not None:  # 알림 비정상 수를 정확히 맞춘다(나머지 비정상은 고장 종류를 돌아가며)
+        others = pick_abnormal(total - normals - notices, list(ABNORMAL))
+        picked = [("notice_fk", "", "")] * notices + others
+    jobs: list[tuple[str | None, str, str]] = [(None, "", "")] * normals + picked
     rnd.shuffle(jobs)
     out.mkdir(parents=True, exist_ok=True)
     for old in out.glob("MC_*.log"):
@@ -441,8 +446,9 @@ def main() -> None:
     parser.add_argument("--out", type=Path, default=OUT)
     parser.add_argument("--total", type=int, default=100, help="로그 수(시험용 세트는 50)")
     parser.add_argument("--ambiguous", action="store_true", help="오류 아닌 INFO 알림으로만 갈리는 애매한 로그를 섞는다(CR-14 시험)")
+    parser.add_argument("--notices", type=int, default=None, help="애매한 세트의 점검 필요 알림(FK) 비정상 수(CR-15 시험)")
     args = parser.parse_args()
-    rows = build(args.seed, args.out, args.total, args.ambiguous)
+    rows = build(args.seed, args.out, args.total, args.ambiguous, args.notices)
     abnormal = sum(r[1] == "비정상" for r in rows)
     print(f"{args.out}: 로그 {len(rows)}개 (정상 {len(rows) - abnormal}, 비정상 {abnormal})")
 

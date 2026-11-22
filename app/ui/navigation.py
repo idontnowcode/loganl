@@ -38,11 +38,17 @@ class SideNav(QFrame):
         self.actions: dict[str, QPushButton] = {}
 
     def add_group(self, title: str) -> None:
+        """섹션 머리: 작고 옅은 굵은 글씨, 앞 섹션과는 구분선과 넉넉한 여백으로 나눈다(항목과 헷갈리지 않게, 2026-11-22)."""
         label = QLabel(title)
         set_role(label, "nav-group")
         if self._layout.count():
+            self._layout.addSpacing(12)
+            rule = QFrame()
+            set_role(rule, "nav-rule")
+            self._layout.addWidget(rule)
             self._layout.addSpacing(10)
         self._layout.addWidget(label)
+        self._layout.addSpacing(2)
 
     def _button(self, text: str) -> QPushButton:
         button = QPushButton(text)

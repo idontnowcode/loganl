@@ -18,7 +18,7 @@ class ConfirmBox(QGroupBox):
     saved = Signal(list)  # 저장한 로그 id들(같은 수집 세션 묶음이면 여러 개)
 
     def __init__(self, database: Database, parent=None) -> None:
-        super().__init__("확인 결과 남기기 — 남긴 결과는 사례로 쌓여 다음 분석과 AI 판단에 쓰입니다", parent)
+        super().__init__("확인 결과 남기기 — 남긴 결과는 사례로 쌓여 다음 분석의 판정에 쓰입니다", parent)
         self.database = database
         self.log_ids: list[int] = []
         self.normal = QRadioButton("정상이었음")

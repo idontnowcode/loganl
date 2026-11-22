@@ -949,3 +949,46 @@ class ReferencePassageRepository:
 
     def approved(self) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM approved_reference_passages ORDER BY document_id, sort_order, id").fetchall()
+
+
+class CriteriaRepository:
+    """판단 기준(CR-15 JQ-03). 엔지니어가 판단 질문에 답해 만든 기준. 같은 특징에 기준은 하나(새 답이 대신함)."""
+
+    COLUMNS = ("feature", "kind", "event_type", "field", "low", "high", "question", "example", "method_text",
+               "source_log_ids", "source_run_id")
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self.conn = conn
+
+    def save(self, *, feature: str, kind: str, question: str, event_type: str | None = None, field: str | None = None,
+             low: float | None = None, high: float | None = None, example: str | None = None,
+             method_text: str | None = None, source_log_ids: Sequence[int] = (), source_run_id: int | None = None) -> int:
+        """같은 특징의 기준이 있으면 고쳐 쓰고(다시 켬), 없으면 만든다. 기준 id."""
+        now = utc_now_iso()
+        values = (feature, kind, event_type, field, low, high, question, example, method_text,
+                  json.dumps(sorted(set(source_log_ids))), source_run_id)
+        row = self.conn.execute("SELECT id FROM judgment_criteria WHERE feature = ?", (feature,)).fetchone()
+        if row is not None:
+            sets = ", ".join(f"{c} = ?" for c in self.COLUMNS)
+            self.conn.execute(f"UPDATE judgment_criteria SET {sets}, status = 'ACTIVE', disabled_reason = NULL, updated_at = ? "
+                              "WHERE id = ?", (*values, now, row["id"]))
+            return int(row["id"])
+        cur = self.conn.execute(
+            f"INSERT INTO judgment_criteria ({', '.join(self.COLUMNS)}, created_at, updated_at) "
+            f"VALUES ({', '.join('?' * len(self.COLUMNS))}, ?, ?)", (*values, now, now))
+        return int(cur.lastrowid)
+
+    def all(self, status: str | None = None) -> list[sqlite3.Row]:
+        if status:
+            return self.conn.execute("SELECT * FROM judgment_criteria WHERE status = ? ORDER BY id", (status,)).fetchall()
+        return self.conn.execute("SELECT * FROM judgment_criteria ORDER BY id").fetchall()
+
+    def get(self, criterion_id: int) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM judgment_criteria WHERE id = ?", (criterion_id,)).fetchone()
+
+    def set_status(self, criterion_id: int, status: str, reason: str | None = None) -> None:
+        self.conn.execute("UPDATE judgment_criteria SET status = ?, disabled_reason = ?, updated_at = ? WHERE id = ?",
+                          (status, reason if status == "DISABLED" else None, utc_now_iso(), criterion_id))
+
+    def delete(self, criterion_id: int) -> None:
+        self.conn.execute("DELETE FROM judgment_criteria WHERE id = ?", (criterion_id,))

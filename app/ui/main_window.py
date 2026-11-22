@@ -204,6 +204,7 @@ class MainWindow(QMainWindow):
         self.nav.add_action("학습 사례", lambda: self.open_case_review())
         self.nav.add_action("분석 이력", lambda: self.open_history())
         self.nav.add_action("참고 자료", lambda: self.open_references())
+        self.nav.add_action("판단 기준", lambda: self.open_criteria())  # CR-15 JQ-06
         self.nav.add_group("설정")
         self.nav.add_action("설정", lambda: self.open_settings())
         self.nav.finish()
@@ -376,6 +377,12 @@ class MainWindow(QMainWindow):
     def open_case_review(self) -> None:
         CaseReviewDialog(self.context, self.open_case, self).exec()
         self._after_detail()
+
+    def open_criteria(self) -> None:
+        """판단 기준 관리(CR-15): 판단 질문에 답해 만든 기준 보기·끄기·지우기."""
+        from app.ui.criteria_dialog import CriteriaDialog
+
+        CriteriaDialog(self.context, self).exec()
 
     def open_history(self) -> None:
         AnalysisHistoryDialog(self.context, self).exec()

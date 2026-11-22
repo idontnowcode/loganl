@@ -9,6 +9,8 @@
 - AI: --ai일 때 Ollama가 낸 비정상 가능성 50% 이상이면 비정상(가능성을 매기지 않았거나 AI 의견이 실패하면 보류)
 - AI 보정: 확인 이력으로 고른 문턱 이상이면 비정상(CM-07, 이력이 적으면 50%), 가능성이 없으면 보류
 정답률은 판단한 것(보류 제외) 중 맞힌 비율이고, 보류 수를 함께 보인다(리뷰 2026-11-22).
+--answer-questions: 분석 뒤 '판단을 돕는 질문'(CR-15)에 정답표를 아는 가상 엔지니어가 답한다. 정상 로그면 '정상에서도 나옴',
+비정상 로그면 물은 근거(특징·원문 줄·값 칸)가 판단 가이드의 낱말과 겹칠 때만 '문제의 표시', 아니면 '모름'(저장 안 함).
 
 실행: uv run python samples/evaluate_learning.py <학습용 폴더> <시험용 폴더> [--ai] [--model gemma3:4b] [--no-memory]
       [--seed 순서 씨앗] [--json 결과 파일] [--data 임시 폴더]
@@ -19,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import re
 import shutil
 import sys
 import tempfile
@@ -30,11 +33,28 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.analysis.diagnostic_engine import AnalysisRequest, DiagnosticEngine  # noqa: E402
 from app.bootstrap import initialize  # noqa: E402
 from app.core.importer import LogImporter  # noqa: E402
+from app.learning.criteria import ABNORMAL_SIGN, BENIGN, CriteriaService  # noqa: E402
 from app.learning.log_entry import LogEntryService  # noqa: E402
 from app.models.enums import OriginPurpose  # noqa: E402
 from app.models.records import ImportRequest, SessionMode  # noqa: E402
 
 DETECTED = {"SUSPECTED", "RULE_VIOLATION"}
+
+
+STOP_WORDS = {"TEST", "INFO", "WARN", "ERROR", "sub", "unit", "step", "code"}
+
+
+def _tokens(text: str | None) -> set[str]:
+    return {t for t in re.findall(r"[A-Za-z][A-Za-z0-9_\-]{2,}", text or "") if t not in STOP_WORDS}
+
+
+def oracle(question, cells: list[str]) -> str | None:
+    """정답표를 아는 가상 엔지니어의 답(CR-15 측정용)."""
+    if cells[1] == "정상":
+        return BENIGN
+    guide = cells[3] if len(cells) > 3 else ""
+    asked = _tokens(question.feature) | _tokens(question.example) | ({question.field} if question.field else set())
+    return ABNORMAL_SIGN if asked & _tokens(guide) else None
 
 
 def read_rows(folder: Path) -> list[list[str]]:
@@ -59,6 +79,7 @@ def main() -> None:
     parser.add_argument("--ai", action="store_true")
     parser.add_argument("--model", default="gemma3:4b")
     parser.add_argument("--no-memory", action="store_true", help="사례 기억을 끄고(CR-14 이전과 같게) 잰다")
+    parser.add_argument("--answer-questions", action="store_true", help="판단 질문에 정답표로 답한다(CR-15)")
     parser.add_argument("--seed", default="", help="시험 순서를 섞을 씨앗(없으면 파일 순서)")
     parser.add_argument("--json", type=Path, default=None)
     parser.add_argument("--data", type=Path, default=Path(tempfile.gettempdir()))
@@ -77,6 +98,7 @@ def main() -> None:
         importer = LogImporter(ctx.database, ctx.paths, ctx.settings.import_)
         entries = LogEntryService(ctx.database)
         engine = DiagnosticEngine(ctx.database, ctx.paths, ctx.settings, use_case_memory=not args.no_memory)
+        criteria = CriteriaService(ctx.database)
 
         def load(folder: Path, cells: list[str]) -> int:
             result = importer.import_logs(ImportRequest(paths=[folder / cells[0]], purpose=OriginPurpose.NORMAL_CASE,
@@ -121,18 +143,28 @@ def main() -> None:
                 "memory_on": bool(memory and memory.calibration and memory.calibration.tau is not None),
                 "hypotheses": [h.text for h in answer.hypotheses][:2] if answer is not None else [],
             }
+            asked, answered = len(result.questions), 0
+            if args.answer_questions:
+                for question in result.questions:
+                    kind = oracle(question, cells)
+                    if kind is not None:
+                        criteria.save_answer(question, kind, log_ids=[log_id], run_id=result.run_id)
+                        answered += 1
+            row["asked"], row["answered"] = asked, answered
             results.append(row)
             confirm(log_id, cells)
             mark = lambda said: "-" if said is None else ("O" if said == row["truth"] else "X")  # noqa: E731
             print(f"  {index:>2} {cells[0]} {'비정상' if row['truth'] else '정상  '} 규칙 {mark(row['rule'])} 최종 {mark(row['final'])}"
                   + (f" AI {mark(row['ai'])}({likelihood}) 보정 {mark(row['ai_cal'])}(문턱 {row['ai_threshold']})" if args.ai else "")
-                  + f" {row['seconds']}초", flush=True)
+                  + (f" 질문 {asked}(답 {answered})" if asked else "") + f" {row['seconds']}초", flush=True)
             if index % 10 == 0 or index == len(test):
                 print(f"  ── 1~{index} 누적: 규칙만 {accuracy(results, 'rule')} · 최종 {accuracy(results, 'final')}"
                       + (f" · AI {accuracy(results, 'ai')} · AI 보정 {accuracy(results, 'ai_cal')}" if args.ai else "")
                       + f" | 최근 {min(10, index)}개: 최종 {accuracy(results[-10:], 'final')}"
                       + (f" · AI {accuracy(results[-10:], 'ai')} · AI 보정 {accuracy(results[-10:], 'ai_cal')}" if args.ai else ""),
                       flush=True)
+        print(f"판단 질문: {sum(r['asked'] for r in results)}개 · 답 {sum(r['answered'] for r in results)}개"
+              f" · 질문이 나온 분석 {sum(1 for r in results if r['asked'])}건", flush=True)
         half = len(results) // 2
         for title, part in (("전체", results), ("앞 절반", results[:half]), ("뒤 절반", results[half:])):
             print(f"{title}: 규칙만 {accuracy(part, 'rule')} · 최종 {accuracy(part, 'final')}"
