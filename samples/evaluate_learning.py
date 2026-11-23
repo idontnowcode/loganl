@@ -157,6 +157,8 @@ def main() -> None:
                 "memory_on": bool(memory and memory.calibration and memory.calibration.tau is not None),
                 "hypotheses": [h.text for h in answer.hypotheses][:2] if answer is not None else [],
                 "reference": bool(result.reference_judgment is not None and result.reference_judgment.used),
+                "relations": ["강" if f.stance == "SUPPORTS" else "약"  # CR-17 숫자 관계(강한 근거·약한 후보)
+                              for f in result.findings if (f.detail or {}).get("kind") in ("value_equal", "value_count")],
             }
             asked, answered = len(result.questions), 0
             if args.answer_questions:
@@ -172,6 +174,7 @@ def main() -> None:
             print(f"  {index:>2} {cells[0]} {'비정상' if row['truth'] else '정상  '} 규칙 {mark(row['rule'])} 최종 {mark(row['final'])}"
                   + (f" AI {mark(row['ai'])}({likelihood}) 보정 {mark(row['ai_cal'])}(문턱 {row['ai_threshold']})" if args.ai else "")
                   + (" 참고자료" if row["reference"] else "")
+                  + (f" 숫자관계[{', '.join(row['relations'])}]" if row["relations"] else "")
                   + (f" 질문 {asked}(답 {answered})" if asked else "") + f" {row['seconds']}초", flush=True)
             if index % 10 == 0 or index == len(test):
                 print(f"  ── 1~{index} 누적: 규칙만 {accuracy(results, 'rule')} · 최종 {accuracy(results, 'final')}"

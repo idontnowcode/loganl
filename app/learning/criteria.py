@@ -236,6 +236,20 @@ def _template(finding: Any, message: str | None) -> tuple[str, str, tuple[tuple[
     if finding.finding_type == "EXPLICIT_ERROR" and detail.get("error_code"):
         return ("CODE", f"오류 코드 {detail['error_code']}가 찍힌 {line}은(는) 실제 문제의 표시인가요?",
                 ((ABNORMAL_SIGN, "문제의 표시예요"), (BENIGN, "무해한 코드예요"), (HOLD, "상황에 따라 달라요")))
+    if finding.finding_type == "VALUE_OUT_OF_RANGE" and kind in ("value_equal", "value_count"):  # CR-17 숫자 관계
+        left, right = detail.get("left") or {}, detail.get("right") or {}
+        counts = detail.get("counts") or {}
+        if right.get("value") is not None:
+            other = f"'{right.get('field')}'({right.get('value'):g})"
+        elif counts:
+            event_type, n = next(iter(counts.items()))
+            other = f"'{event_type.split('|', 1)[-1].split(' ', 1)[0]}' 줄 수({n})"
+        else:
+            other = "같이 나온 줄 수"
+        value = left.get("value")
+        mine = f"'{left.get('field')}'({value:g})" if isinstance(value, (int, float)) else f"'{left.get('field')}'"
+        return ("RELATION", f"정상 로그에서는 늘 같던 {mine}과(와) {other}이(가) 이 로그에서 다릅니다. 이것은 문제인가요?",
+                ((ABNORMAL_SIGN, "문제예요"), (BENIGN, "달라도 돼요"), (HOLD, "상황에 따라 달라요")))
     if finding.finding_type == "VALUE_OUT_OF_RANGE":
         value = detail.get("value")
         return ("VALUE", f"'{detail.get('field')}' 값 {value:g}({line})은(는) 정상 범위를 벗어난 것인가요? 정상 범위를 알면 적어 주세요."
@@ -279,7 +293,8 @@ def make_questions(findings: Sequence[Any], strong: frozenset[str], weak: frozen
     if verdict_state == "UNDECIDED":
         candidates += [f for f in sorted(weak) if open_question(f)]
     else:  # 판정이 났어도 처음 보는 줄(이력 없음)은 뜻을 모르므로 묻는다
-        candidates += [f for f in sorted(weak) if open_question(f) and unseen(f) and f.startswith("EXTRA_EVENT")]
+        candidates += [f for f in sorted(weak) if open_question(f) and unseen(f)
+                       and f.startswith(("EXTRA_EVENT", "VALUE_OUT_OF_RANGE/value_equal", "VALUE_OUT_OF_RANGE/value_count"))]
     first: dict[str, Any] = {}
     for finding in findings:
         if finding.layer != "DETERMINISTIC":

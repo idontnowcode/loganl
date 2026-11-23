@@ -622,6 +622,22 @@
 | RJ-05 | 확인된 사례 로그와 자주 어긋나는 항목은 이번 판정에 쓰지 않고 이유를 남김 | 구현 | `integration/test_reference_judgment`(확인된 정상 로그 2개에 나오면 건너뜀) |
 | RJ-06 | 참고 자료가 판정을 준 근거는 판단 질문에서 묻지 않음 | 구현 | `integration/test_reference_judgment` |
 | RJ-07 | 측정: `evaluate_learning.py --reference --train-limit` | 구현 | 측정 기록 `TEST_PLAN`(새 알림 92% → 98%, 학습 10개 76% → 86%) |
+
+### 1.33 변경 요청 CR-17 — 코드가 후보를 좁히고 AI가 확인 (숫자 관계) (2026-11-23 사용자 결정)
+
+> 사용자 직접 시험: 비정상 `시험_005`(기판 하나 빠짐, `count=17`인데 `processed=16`, 오류 줄 없음)를 계속 정상으로 판단 → "앱의 신뢰성이 매우 떨어짐".
+> 저장한 확인 결과로 판정을 덮는 수정은 사용자가 거절("판정은 내용으로", 되돌림). 로컬 AI 직접 시험 뒤 사용자 결정: "코드 후보 + AI 확인".
+> 설계: `docs/CR17_숫자_관계_후보_AI_확인_설계.md`.
+
+| ID | 요구사항 | 상태 | 검증 |
+|---|---|---|---|
+| VR-01 | 비슷한 정상 로그에서 숫자 관계(값=값, 값=이벤트 횟수)를 배움 — 정상 로그 5개 이상·값 3가지 이상·어긋남 없음 | 구현 | `unit/test_value_relations`, `integration/test_value_relation_analysis` |
+| VR-02 | 관계의 두 쪽이 다 있는데 값이 다르면 후보(두 줄·두 값·정상 로그 수) | 구현 | `integration/test_value_relation_analysis` |
+| VR-03 | 정상 로그 10개 이상이면 강한 근거(코드 판정), 5~9개면 약한 후보 | 구현 | `unit/test_value_relations`(정상 로그 수에 따른 세기), `integration/test_value_relation_analysis` |
+| VR-04 | 약한 후보만 AI가 그 줄(최대 4줄)만 보고 확인(YES면 강한 근거로), 이유에 칸 이름·값이 없으면 버림, 묻고 받은 글을 남김 | 보류 | 로컬 모델 두 개(gemma3:4b, gemma4:e2b)가 진짜 관계와 우연한 쌍을 구분하지 못함(묻는 말투에 따라 전부 YES 또는 전부 NO, 설계 §8). 약한 후보는 판단 질문으로 엔지니어에게 |
+| VR-05 | 후보를 근거 지문에 넣어 사례 기억·판단 질문이 쓰게 함 | 구현 | `integration/test_value_relation_analysis`(약한 후보 → 판단 질문) |
+| VR-06 | 화면: 예상 에러 메시지 '정상과 다른 숫자 관계', ③ 근거와 AI 확인 결과 | 구현 | `integration/test_value_relation_analysis`(예상 에러 '정상과 다른 숫자 관계') |
+| VR-07 | 측정: 학습·시험 프로토콜(AI 켬·끔, 모델 비교) + 기존 세트 회귀(오탐률) | 구현 | 측정 기록 `TEST_PLAN` |
 ---
 
 ## 2. 검토 결과

@@ -21,15 +21,18 @@ from app.storage.database import Database
 from app.storage.repositories import EventRepository
 
 ERROR, DIFFERENT, NEW_WARNING, MISSING = "ERROR", "DIFFERENT", "NEW_WARNING", "MISSING"
+RELATION = "RELATION"  # CR-17: 정상에서 늘 같던 숫자 짝이 어긋남
 WARNING = "WARNING"  # 로그 입력 탭: 정상 로그와 비교하지 않은 경고·실패 낱말 줄
 GROUP_TITLES = {
     ERROR: "에러로 기록된 줄",
     DIFFERENT: "비슷한 정상 로그와 다른 줄",
     NEW_WARNING: "정상 로그에 없던 경고·실패 줄",
     MISSING: "평소 있던 메시지가 없음",
+    RELATION: "정상과 다른 숫자 관계",
     WARNING: "경고·실패 낱말이 있는 줄",
 }
-GROUP_ORDER = {ERROR: 0, DIFFERENT: 1, NEW_WARNING: 2, WARNING: 2, MISSING: 3}
+GROUP_ORDER = {ERROR: 0, RELATION: 1, DIFFERENT: 1, NEW_WARNING: 2, WARNING: 2, MISSING: 3}
+RELATION_KINDS = frozenset({"value_equal", "value_count"})
 DIFFERENT_TYPES = frozenset({"VALUE_OUT_OF_RANGE", "VALUE_STUCK", "REPETITION", "ORDER_VIOLATION", "LATENCY",
                              "MISSING_EVENT"})
 WARN_LEVELS = frozenset({"WARN", "WARNING"})
@@ -106,6 +109,9 @@ def presumed_errors(findings: Sequence[Any], keys: Mapping[int, str] | None = No
         raw = _first_line(raw_lines.get(event_id)) if event_id is not None else ""
         if kind == "EXPLICIT_ERROR":
             group = ERROR
+        elif (kind == "VALUE_OUT_OF_RANGE" and isinstance(detail, dict) and detail.get("kind") in RELATION_KINDS
+              and _get(finding, "stance") == "SUPPORTS"):
+            group = RELATION
         elif kind in DIFFERENT_TYPES and _get(finding, "stance") == "SUPPORTS":
             group = DIFFERENT if event_id is not None else MISSING
         elif kind == "EXTRA_EVENT" and (_get(finding, "stance") == "SUPPORTS" or FAIL_WORDS.search(raw or summary)):

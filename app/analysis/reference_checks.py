@@ -16,6 +16,7 @@
 - 상태값 바뀜: 정상 로그 모두에서 늘 같던 낱말 값(예: result=OK)이 다름
 - 통째로 없음: 정상 로그 10개 이상 모두에 2번 이상씩 나오던 이벤트가 한 번도 없음
 - 짝 횟수 어긋남: 정상 로그마다 늘 서로 같은 횟수로 나오던 이벤트들(채널·반복 단계)의 횟수가 다름
+- 숫자 관계(CR-17): 정상 로그마다 늘 같던 숫자 칸 둘(또는 숫자 칸과 이벤트 횟수)이 다름 — value_relations.py
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from app.analysis.anomaly_detector import Finding
+from app.analysis.value_relations import relation_findings
 from app.core.event_normalizer import message_template
 from app.core.feature_extractor import ERROR_LEVELS, WARNING_LEVELS, FileFeatures
 from app.models.records import EventRecord
@@ -114,7 +116,15 @@ def _compare(target: FileFeatures, events: Sequence[EventRecord], refs: Sequence
     findings += _stuck(events, refs, detail, target.log_file_id)
     findings += _new_warnings(events, refs, detail, target.log_file_id, known_types or set())
     findings += _missing_components(target, events, refs, detail)
+    findings += relation_findings(_numeric_fields(events), _type_counts(events),  # CR-17 숫자 관계
+                                  [_numeric_fields(r.events) for r in refs], [_type_counts(r.events) for r in refs],
+                                  target.log_file_id, detail, _name)
     return findings
+
+
+def _type_counts(events: Sequence[EventRecord]) -> Counter:
+    """이벤트 모양별 횟수(숫자 칸과 같은 열쇠: event_type, 없으면 메시지)."""
+    return Counter(e.event_type or e.message for e in events)
 
 
 # ---------------------------------------------------------------- 정상에 없던 경고·통째로 빠진 구성요소 (CR-13)
